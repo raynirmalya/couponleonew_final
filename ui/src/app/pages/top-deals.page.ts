@@ -908,7 +908,7 @@ export default class TopDealsPage {
   );
 
   private readonly categoriesState = toSignal(
-    withRequestState(this.api.listCategories({ pageSize: 120 }), emptyListResponse<CouponleoCategory>()),
+    withRequestState(this.api.listCategories({ pageSize: 1000 }), emptyListResponse<CouponleoCategory>()),
     { initialValue: createLoadingState(emptyListResponse<CouponleoCategory>()) },
   );
   private readonly couponsState = toSignal(

@@ -3,7 +3,7 @@ from __future__ import annotations
 from flask import Blueprint, abort, jsonify, request
 
 from data.repository import repository
-from routes.listing_utils import list_response, paginate_items, parse_limit_arg, parse_page_arg
+from routes.listing_utils import list_response, parse_limit_arg, parse_page_arg
 
 locations_bp = Blueprint("locations", __name__)
 
@@ -19,16 +19,26 @@ def _payload() -> dict:
 @locations_bp.get("/")
 def list_locations():
     query = request.args.get("q", "")
-    all_items = repository.search_locations(query=query) if query else repository.list_items("locations")
     page = parse_page_arg()
-    limit = parse_limit_arg(default=48, maximum=250)
-    items, meta = paginate_items(all_items, page, limit)
-    return list_response(items, len(all_items), meta)
+    limit = parse_limit_arg(default=48, maximum=250) or 48
+    items, total = repository.list_locations_live(query=query, page=page, limit=limit)
+    page_count = max(1, (total + limit - 1) // limit)
+    return list_response(
+        items,
+        total,
+        {
+            "page": page,
+            "pageCount": page_count,
+            "pageSize": limit,
+            "hasNextPage": page < page_count,
+            "hasPreviousPage": page > 1,
+        },
+    )
 
 
 @locations_bp.get("/<identifier>")
 def get_location(identifier: str):
-    item = repository.get_item("locations", identifier)
+    item = repository.get_location_live(identifier)
     if item is None:
         abort(404, description="Location not found.")
     return jsonify({"data": item})

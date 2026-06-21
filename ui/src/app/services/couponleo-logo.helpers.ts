@@ -68,9 +68,14 @@ export function isAllowedCouponleoLogoUrl(url: string): boolean {
 }
 
 export function proxiedCouponleoLogoUrl(url: string): string {
-  if (!isAllowedCouponleoLogoUrl(url) || isCouponleoLogoUrlBlocked(url)) {
+  if (isCouponleoLogoUrlBlocked(url)) {
     return '';
   }
 
-  return `/api/logo?url=${encodeURIComponent(url)}`;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : '';
+  } catch {
+    return isAllowedCouponleoLogoUrl(url) ? url : '';
+  }
 }

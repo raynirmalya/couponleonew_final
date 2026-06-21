@@ -801,11 +801,31 @@ class CouponLeoRepository:
 
         store_term = _clean_text(store).lower()
         if store_term:
+            store_plain_term = store_term.replace("-", " ")
+            store_domain_term = store_term.replace("-", ".")
+            store_slug_term = _slugify(store_term)
             clauses.append(
-                "(LOWER(COALESCE(store, '')) = %s OR LOWER(REPLACE(COALESCE(store, ''), ' ', '-')) = %s "
-                "OR LOWER(COALESCE(store, '')) LIKE %s)"
+                "("
+                "LOWER(COALESCE(store, '')) = %s "
+                "OR LOWER(COALESCE(store, '')) = %s "
+                "OR LOWER(REPLACE(COALESCE(store, ''), ' ', '-')) = %s "
+                "OR LOWER(REPLACE(REPLACE(REPLACE(COALESCE(store, ''), '.', '-'), ' ', '-'), '_', '-')) = %s "
+                "OR LOWER(COALESCE(store, '')) LIKE %s "
+                "OR LOWER(COALESCE(merchant_home_page, '')) LIKE %s "
+                "OR LOWER(COALESCE(url, '')) LIKE %s"
+                ")"
             )
-            params.extend([store_term.replace('-', ' '), store_term, f"%{store_term.replace('-', ' ')}%"])
+            params.extend(
+                [
+                    store_plain_term,
+                    store_domain_term,
+                    store_term,
+                    store_slug_term,
+                    f"%{store_plain_term}%",
+                    f"%{store_domain_term}%",
+                    f"%{store_domain_term}%",
+                ]
+            )
 
         location_term = _clean_text(location).lower()
         if location_term:
@@ -1396,9 +1416,16 @@ class CouponLeoRepository:
 
         if raw_coupons:
             store_payload = self._build_store_record(store_name, store_row, raw_coupons, location_lookup)
+            category_name = _clean_text(store_payload.get("category")) or "Store"
+            category_copy = category_name.lower() if category_name.strip().lower() != "other" else "store"
+            location_name = _clean_text(store_payload.get("location")) or "Global"
             store_payload["activeCoupons"] = coupon_count
             store_payload["couponCount"] = coupon_count
             store_payload["hasLiveOffers"] = coupon_count > 0
+            store_payload["headline"] = (
+                f"{coupon_count} live {category_copy} offers for {location_name} shoppers, "
+                "refreshed from CouponLeo's real coupon feed."
+            )
         else:
             store_payload = self._build_store_directory_record(store_row, location_lookup)
 

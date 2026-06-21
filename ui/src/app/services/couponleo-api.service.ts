@@ -258,7 +258,7 @@ export const COUPONLEO_API_BASE_URL = new InjectionToken<string>('COUPONLEO_API_
 @Injectable({ providedIn: 'root' })
 export class CouponleoApiService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = inject(COUPONLEO_API_BASE_URL, { optional: true }) ?? 'http://127.0.0.1:5000/couponleo/api';
+  private readonly baseUrl = inject(COUPONLEO_API_BASE_URL, { optional: true }) ?? '/couponleo/api';
 
   listCategories(params: CouponleoCategoryListParams = {}): Observable<CouponleoListResponse<CouponleoCategory>> {
     return this.http.get<CouponleoListResponse<CouponleoCategory>>(`${this.baseUrl}/categories`, {

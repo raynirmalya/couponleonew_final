@@ -104,7 +104,7 @@ export class CouponleoAuthService {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly browser = isPlatformBrowser(this.platformId);
   private readonly telemetry = inject(CouponleoTelemetryService);
-  private readonly baseUrl = inject(COUPONLEO_API_BASE_URL, { optional: true }) ?? 'http://127.0.0.1:5000/couponleo/api';
+  private readonly baseUrl = inject(COUPONLEO_API_BASE_URL, { optional: true }) ?? '/couponleo/api';
   private readonly sessionState = signal<CouponleoSession | null>(null);
 
   readonly session = this.sessionState.asReadonly();
