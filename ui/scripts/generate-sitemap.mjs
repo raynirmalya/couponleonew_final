@@ -1,11 +1,15 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const uiRoot = resolve(scriptDirectory, '..');
-const dataDirectory = resolve(uiRoot, '..', 'api', 'dataservices', 'data');
-const publicDirectory = resolve(uiRoot, 'public');
+const dataDirectory = process.env.COUPONLEO_DATA_DIRECTORY
+  ? resolve(process.env.COUPONLEO_DATA_DIRECTORY)
+  : resolve(uiRoot, '..', 'api', 'dataservices', 'data');
+const publicDirectory = process.env.COUPONLEO_PUBLIC_DIRECTORY
+  ? resolve(process.env.COUPONLEO_PUBLIC_DIRECTORY)
+  : resolve(uiRoot, 'public');
 const sitemapIndexPath = resolve(publicDirectory, 'sitemap.xml');
 const sitemapDirectory = resolve(publicDirectory, 'sitemaps');
 
@@ -146,7 +150,18 @@ function writeIfChanged(filePath, content) {
     return false;
   }
 
-  writeFileSync(filePath, content, 'utf8');
+  const tempPath = resolve(
+    dirname(filePath),
+    `.${basename(filePath)}.${process.pid}.${Date.now().toString(36)}.tmp`,
+  );
+
+  writeFileSync(tempPath, content, 'utf8');
+
+  if (process.platform === 'win32' && existsSync(filePath)) {
+    rmSync(filePath);
+  }
+
+  renameSync(tempPath, filePath);
   return true;
 }
 

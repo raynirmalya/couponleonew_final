@@ -145,13 +145,13 @@
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=European+Union</loc>
+    <loc>https://couponleo.com/country-deals?country=Switzerland</loc>
     <lastmod>2026-06-21</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Switzerland</loc>
+    <loc>https://couponleo.com/country-deals?country=European+Union</loc>
     <lastmod>2026-06-21</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
@@ -175,13 +175,13 @@
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Malaysia</loc>
+    <loc>https://couponleo.com/country-deals?country=Greece</loc>
     <lastmod>2026-06-21</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Greece</loc>
+    <loc>https://couponleo.com/country-deals?country=Malaysia</loc>
     <lastmod>2026-06-21</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
@@ -391,13 +391,13 @@
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Latvia</loc>
+    <loc>https://couponleo.com/country-deals?country=Paraguay</loc>
     <lastmod>2026-06-21</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Paraguay</loc>
+    <loc>https://couponleo.com/country-deals?country=Latvia</loc>
     <lastmod>2026-06-21</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
@@ -410,12 +410,6 @@
   </url>
   <url>
     <loc>https://couponleo.com/country-deals?country=Slovenia</loc>
-    <lastmod>2026-06-21</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.80</priority>
-  </url>
-  <url>
-    <loc>https://couponleo.com/country-deals?country=Estonia</loc>
     <lastmod>2026-06-21</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
@@ -434,6 +428,12 @@
   </url>
   <url>
     <loc>https://couponleo.com/country-deals?country=Cambodia</loc>
+    <lastmod>2026-06-21</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.80</priority>
+  </url>
+  <url>
+    <loc>https://couponleo.com/country-deals?country=Estonia</loc>
     <lastmod>2026-06-21</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>

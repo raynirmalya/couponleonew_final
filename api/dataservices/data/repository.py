@@ -147,6 +147,19 @@ def _location_name_key(value: Any) -> str:
     return _slugify(_clean_text(value)).upper()
 
 
+def _write_json_atomically(file_path: Path, payload: Any, *, indent: int | None = None) -> None:
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = file_path.with_name(f".{file_path.name}.{os.getpid()}.tmp")
+
+    try:
+        with temp_path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=indent)
+        temp_path.replace(file_path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+
+
 class CouponLeoRepository:
     def __init__(self, data_file: str) -> None:
         self._data_file = Path(data_file).expanduser() if data_file else None
@@ -165,6 +178,15 @@ class CouponLeoRepository:
         self._featured_coupon_cache: Optional[List[Dict[str, Any]]] = None
         self._analytics_cache: Optional[Dict[str, Any]] = None
         self._direct_query_enabled = os.getenv("COUPONLEO_DIRECT_QUERY_MODE", "true").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        self._prefer_precomputed_summaries = os.getenv(
+            "COUPONLEO_PREFER_PRECOMPUTED_SUMMARIES",
+            "true",
+        ).strip().lower() in {
             "1",
             "true",
             "yes",
@@ -214,9 +236,7 @@ class CouponLeoRepository:
         if dataset_path is None:
             return
 
-        dataset_path.parent.mkdir(parents=True, exist_ok=True)
-        with dataset_path.open("w", encoding="utf-8") as handle:
-            json.dump(dataset, handle, indent=2)
+        _write_json_atomically(dataset_path, dataset, indent=2)
 
     def _persist_live_snapshot(self, dataset: Dict[str, List[Dict[str, Any]]]) -> None:
         self._write_dataset_file(self._snapshot_file, dataset)
@@ -266,6 +286,118 @@ class CouponLeoRepository:
             return None
 
         return payload if isinstance(payload, list) else None
+
+    def _fallback_precomputed_store_page(
+        self,
+        *,
+        query: str = "",
+        category: str = "",
+        location: str = "",
+        featured: Optional[bool] = None,
+        starts_with: str = "",
+        page: int = 1,
+        limit: int = 48,
+    ) -> Optional[tuple[List[Dict[str, Any]], int]]:
+        normalized_page = max(1, int(page or 1))
+        normalized_limit = max(1, int(limit or 48))
+        has_filters = any(
+            (
+                _clean_text(query),
+                _clean_text(category),
+                _clean_text(location),
+                _clean_text(starts_with),
+            )
+        )
+
+        if featured is True and not has_filters:
+            precomputed_featured = self._load_precomputed_summary("featured-stores.json")
+            if precomputed_featured is not None:
+                start = (normalized_page - 1) * normalized_limit
+                return deepcopy(precomputed_featured[start:start + normalized_limit]), len(precomputed_featured)
+
+        precomputed_stores = self._load_precomputed_summary("stores-summary.json")
+        if precomputed_stores is None:
+            return None
+
+        filtered_items = self._filter_precomputed_store_items(
+            precomputed_stores,
+            query=query,
+            category=category,
+            location=location,
+            featured=featured,
+            starts_with=starts_with,
+        )
+        total = len(filtered_items)
+        start = (normalized_page - 1) * normalized_limit
+        return deepcopy(filtered_items[start:start + normalized_limit]), total
+
+    def _fallback_precomputed_category_page(
+        self,
+        *,
+        query: str = "",
+        location: str = "",
+        page: int = 1,
+        limit: int = 48,
+    ) -> Optional[tuple[List[Dict[str, Any]], int]]:
+        if _clean_text(location):
+            return None
+
+        precomputed_categories = self._load_precomputed_summary("categories-summary.json")
+        if precomputed_categories is None:
+            return None
+
+        filtered_items = self._filter_precomputed_category_items(precomputed_categories, query=query)
+        total = len(filtered_items)
+        normalized_page = max(1, int(page or 1))
+        normalized_limit = max(1, int(limit or 48))
+        start = (normalized_page - 1) * normalized_limit
+        return deepcopy(filtered_items[start:start + normalized_limit]), total
+
+    def _fallback_precomputed_category_item(self, identifier: str) -> Optional[Dict[str, Any]]:
+        target = _clean_text(identifier).lower()
+        if not target:
+            return None
+
+        precomputed_categories = self._load_precomputed_summary("categories-summary.json")
+        if precomputed_categories is None:
+            return None
+
+        for item in precomputed_categories:
+            if target in {
+                _clean_text(item.get("id")).lower(),
+                _clean_text(item.get("slug")).lower(),
+                _clean_text(item.get("name")).lower(),
+            }:
+                return deepcopy(item)
+
+        return None
+
+    def _fallback_precomputed_location_page(
+        self,
+        *,
+        query: str = "",
+        page: int = 1,
+        limit: int = 48,
+    ) -> Optional[tuple[List[Dict[str, Any]], int]]:
+        precomputed_locations = self._load_precomputed_summary("locations-summary.json")
+        if precomputed_locations is None:
+            return None
+
+        query_term = _clean_text(query).lower()
+        filtered_items = (
+            [
+                item
+                for item in precomputed_locations
+                if query_term in f"{item.get('name', '')} {item.get('code', '')} {item.get('spotlight', '')}".lower()
+            ]
+            if query_term
+            else precomputed_locations
+        )
+        total = len(filtered_items)
+        normalized_page = max(1, int(page or 1))
+        normalized_limit = max(1, int(limit or 48))
+        start = (normalized_page - 1) * normalized_limit
+        return deepcopy(filtered_items[start:start + normalized_limit]), total
 
     def _filter_precomputed_store_items(
         self,
@@ -1116,21 +1248,34 @@ class CouponLeoRepository:
     ) -> tuple[List[Dict[str, Any]], int]:
         normalized_page = max(1, int(page or 1))
         normalized_limit = max(1, int(limit or 48))
-        precomputed_stores = self._load_precomputed_summary("stores-summary.json")
-        if precomputed_stores is not None:
-            filtered_items = self._filter_precomputed_store_items(
-                precomputed_stores,
+        offset = (normalized_page - 1) * normalized_limit
+
+        if self._prefer_precomputed_summaries:
+            precomputed_page = self._fallback_precomputed_store_page(
                 query=query,
                 category=category,
                 location=location,
                 featured=featured,
                 starts_with=starts_with,
+                page=page,
+                limit=limit,
             )
-            total = len(filtered_items)
-            start = (normalized_page - 1) * normalized_limit
-            return deepcopy(filtered_items[start:start + normalized_limit]), total
+            if precomputed_page is not None:
+                return precomputed_page
 
         if not self._direct_catalog_mode():
+            precomputed_page = self._fallback_precomputed_store_page(
+                query=query,
+                category=category,
+                location=location,
+                featured=featured,
+                starts_with=starts_with,
+                page=page,
+                limit=limit,
+            )
+            if precomputed_page is not None:
+                return precomputed_page
+
             items = self.search_stores(query=query, category=category, location=location)
             if featured is True:
                 items = [item for item in items if bool(item.get("featured"))][: max(1, int(limit or 48))]
@@ -1152,176 +1297,197 @@ class CouponLeoRepository:
         if cached is not None:
             return cached
 
-        precomputed_featured = self._load_precomputed_summary("featured-stores.json")
-        if featured is True and precomputed_featured:
-            start = (normalized_page - 1) * normalized_limit
-            items = deepcopy(precomputed_featured[start:start + normalized_limit])
-            return self._write_direct_cache(cache_key, (items, len(precomputed_featured)))
+        try:
+            if featured is True and not any((_clean_text(query), _clean_text(category), _clean_text(location))):
+                connection = self._connect_mysql()
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            """
+                            SELECT COUNT(1) AS total
+                            FROM (
+                                SELECT store
+                                FROM coupons
+                                WHERE TRIM(COALESCE(store, '')) NOT IN ('', 'unknown')
+                                  AND (end_date IS NULL OR end_date >= CURDATE())
+                                GROUP BY store
+                            ) grouped
+                            """
+                        )
+                        total = int((cursor.fetchone() or {}).get("total") or 0)
 
-        if featured is True and not any((_clean_text(query), _clean_text(category), _clean_text(location))):
+                        cursor.execute(
+                            """
+                            SELECT
+                                store AS store_name,
+                                COUNT(1) AS coupon_count,
+                                MAX(COALESCE(rating, 0)) AS max_rating,
+                                MAX(primary_location) AS coupon_primary_location,
+                                MAX(locations) AS coupon_locations,
+                                MAX(COALESCE(standard_categories, categories, '')) AS coupon_categories
+                            FROM coupons
+                            WHERE TRIM(COALESCE(store, '')) NOT IN ('', 'unknown')
+                              AND (end_date IS NULL OR end_date >= CURDATE())
+                            GROUP BY store
+                            ORDER BY COUNT(1) DESC, MAX(COALESCE(rating, 0)) DESC, store ASC
+                            LIMIT %s OFFSET %s
+                            """,
+                            (normalized_limit, offset),
+                        )
+                        rows = cursor.fetchall()
+                        store_names = [
+                            _clean_text(row.get("store_name"))
+                            for row in rows
+                            if _clean_text(row.get("store_name"))
+                        ]
+                        raw_store_rows = self._load_store_rows(cursor, store_names)
+                        location_lookup = self._load_location_lookup(cursor)
+
+                    store_rows_by_name: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+                    for store_row in raw_store_rows:
+                        store_rows_by_name[_lower_text(store_row.get("name"))].append(store_row)
+
+                    items: List[Dict[str, Any]] = []
+                    for row in rows:
+                        store_name = _clean_text(row.get("store_name"))
+                        store_row = self._select_store_row(store_rows_by_name.get(store_name.lower(), []))
+                        row_payload = {
+                            **row,
+                            "canonical_name": store_name,
+                            "store_id": store_row.get("id") if store_row else _slugify(store_name),
+                            "store_primary_location": store_row.get("primary_location") if store_row else "",
+                            "url": store_row.get("url") if store_row else "",
+                            "logo_horizontal_url": store_row.get("logo_horizontal_url") if store_row else "",
+                            "logo_square_url": store_row.get("logo_square_url") if store_row else "",
+                            "authority_tier": store_row.get("authority_tier") if store_row else 0,
+                            "category_hint": store_row.get("category_hint") if store_row else "",
+                            "initial_rank_score": store_row.get("initial_rank_score") if store_row else 45,
+                            "featured_count": 1,
+                        }
+                        items.append(self._build_store_summary_record(row_payload, location_lookup, force_featured=True))
+
+                    return self._write_direct_cache(cache_key, (items, total))
+                finally:
+                    connection.close()
+
+            clauses = ["TRIM(COALESCE(c.store, '')) NOT IN ('', 'unknown')", "(c.end_date IS NULL OR c.end_date >= CURDATE())"]
+            params: list[Any] = []
+
+            query_term = _clean_text(query).lower()
+            if query_term:
+                clauses.append("(LOWER(c.store) LIKE %s OR LOWER(COALESCE(s.url, '')) LIKE %s)")
+                params.extend([f"%{query_term}%", f"%{query_term}%"])
+
+            category_term = _clean_text(category).lower()
+            if category_term:
+                category_like = f"%{category_term.replace('-', ' ')}%"
+                clauses.append(
+                    "(LOWER(COALESCE(c.standard_categories, '')) LIKE %s OR LOWER(COALESCE(c.categories, '')) LIKE %s "
+                    "OR LOWER(COALESCE(s.category_hint, '')) LIKE %s)"
+                )
+                params.extend([category_like, category_like, category_like])
+
+            location_term = _clean_text(location).lower()
+            if location_term:
+                clauses.append(
+                    "(LOWER(COALESCE(c.primary_location, '')) LIKE %s OR LOWER(COALESCE(c.locations, '')) LIKE %s "
+                    "OR LOWER(COALESCE(s.primary_location, '')) LIKE %s)"
+                )
+                params.extend([f"%{location_term}%", f"%{location_term}%", f"%{location_term}%"])
+
+            if featured is True:
+                clauses.append("(LOWER(COALESCE(c.featured, '')) = 'yes' OR COALESCE(s.initial_rank_score, 0) >= 70)")
+
+            where_sql = " AND ".join(clauses)
+            should_count_total = featured is not True
+
             connection = self._connect_mysql()
             try:
                 with connection.cursor() as cursor:
-                    cursor.execute(
-                        """
-                        SELECT
-                            store AS store_name,
-                            COUNT(1) AS coupon_count,
-                            MAX(COALESCE(rating, 0)) AS max_rating,
-                            MAX(primary_location) AS coupon_primary_location,
-                            MAX(locations) AS coupon_locations,
-                            MAX(COALESCE(standard_categories, categories, '')) AS coupon_categories
-                        FROM coupons
-                        WHERE TRIM(COALESCE(store, '')) NOT IN ('', 'unknown')
-                          AND (end_date IS NULL OR end_date >= CURDATE())
-                        GROUP BY store
-                        ORDER BY COUNT(1) DESC, MAX(COALESCE(rating, 0)) DESC, store ASC
-                        LIMIT %s OFFSET %s
-                        """,
-                        (normalized_limit, offset),
-                    )
-                    rows = cursor.fetchall()
-                    store_names = [
-                        _clean_text(row.get("store_name"))
-                        for row in rows
-                        if _clean_text(row.get("store_name"))
-                    ]
-                    raw_store_rows = self._load_store_rows(cursor, store_names)
-                    location_lookup = self._load_location_lookup(cursor)
+                    total = 0
+                    if should_count_total:
+                        cursor.execute(
+                            f"""
+                            SELECT COUNT(1) AS total
+                            FROM (
+                                SELECT c.store
+                                FROM coupons c
+                                LEFT JOIN stores s ON s.name = c.store
+                                WHERE {where_sql}
+                                GROUP BY c.store
+                            ) grouped
+                            """,
+                            params,
+                        )
+                        total = int((cursor.fetchone() or {}).get("total") or 0)
 
-                store_rows_by_name: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-                for store_row in raw_store_rows:
-                    store_rows_by_name[_lower_text(store_row.get("name"))].append(store_row)
-
-                items: List[Dict[str, Any]] = []
-                for row in rows:
-                    store_name = _clean_text(row.get("store_name"))
-                    store_row = self._select_store_row(store_rows_by_name.get(store_name.lower(), []))
-                    row_payload = {
-                        **row,
-                        "canonical_name": store_name,
-                        "store_id": store_row.get("id") if store_row else _slugify(store_name),
-                        "store_primary_location": store_row.get("primary_location") if store_row else "",
-                        "url": store_row.get("url") if store_row else "",
-                        "logo_horizontal_url": store_row.get("logo_horizontal_url") if store_row else "",
-                        "logo_square_url": store_row.get("logo_square_url") if store_row else "",
-                        "authority_tier": store_row.get("authority_tier") if store_row else 0,
-                        "category_hint": store_row.get("category_hint") if store_row else "",
-                        "initial_rank_score": store_row.get("initial_rank_score") if store_row else 45,
-                        "featured_count": 1,
-                    }
-                    items.append(self._build_store_summary_record(row_payload, location_lookup, force_featured=True))
-
-                return self._write_direct_cache(cache_key, (items, offset + len(items)))
-            finally:
-                connection.close()
-
-        clauses = ["TRIM(COALESCE(c.store, '')) NOT IN ('', 'unknown')", "(c.end_date IS NULL OR c.end_date >= CURDATE())"]
-        params: list[Any] = []
-
-        query_term = _clean_text(query).lower()
-        if query_term:
-            clauses.append("(LOWER(c.store) LIKE %s OR LOWER(COALESCE(s.url, '')) LIKE %s)")
-            params.extend([f"%{query_term}%", f"%{query_term}%"])
-
-        category_term = _clean_text(category).lower()
-        if category_term:
-            category_like = f"%{category_term.replace('-', ' ')}%"
-            clauses.append(
-                "(LOWER(COALESCE(c.standard_categories, '')) LIKE %s OR LOWER(COALESCE(c.categories, '')) LIKE %s "
-                "OR LOWER(COALESCE(s.category_hint, '')) LIKE %s)"
-            )
-            params.extend([category_like, category_like, category_like])
-
-        location_term = _clean_text(location).lower()
-        if location_term:
-            clauses.append(
-                "(LOWER(COALESCE(c.primary_location, '')) LIKE %s OR LOWER(COALESCE(c.locations, '')) LIKE %s "
-                "OR LOWER(COALESCE(s.primary_location, '')) LIKE %s)"
-            )
-            params.extend([f"%{location_term}%", f"%{location_term}%", f"%{location_term}%"])
-
-        if featured is True:
-            clauses.append("(LOWER(COALESCE(c.featured, '')) = 'yes' OR COALESCE(s.initial_rank_score, 0) >= 70)")
-
-        where_sql = " AND ".join(clauses)
-        offset = (normalized_page - 1) * normalized_limit
-        should_count_total = featured is not True
-
-        connection = self._connect_mysql()
-        try:
-            with connection.cursor() as cursor:
-                total = 0
-                if should_count_total:
                     cursor.execute(
                         f"""
-                        SELECT COUNT(1) AS total
-                        FROM (
-                            SELECT c.store
-                            FROM coupons c
-                            LEFT JOIN stores s ON s.name = c.store
-                            WHERE {where_sql}
-                            GROUP BY c.store
-                        ) grouped
+                        SELECT
+                            c.store AS store_name,
+                            COALESCE(s.name, c.store) AS canonical_name,
+                            s.id AS store_id,
+                            s.primary_location AS store_primary_location,
+                            MAX(c.primary_location) AS coupon_primary_location,
+                            MAX(c.locations) AS coupon_locations,
+                            MAX(COALESCE(c.standard_categories, c.categories, '')) AS coupon_categories,
+                            s.url,
+                            s.logo_horizontal_url,
+                            s.logo_square_url,
+                            s.authority_tier,
+                            s.category_hint,
+                            s.initial_rank_score,
+                            COUNT(1) AS coupon_count,
+                            MAX(COALESCE(c.rating, 0)) AS max_rating,
+                            SUM(CASE WHEN LOWER(COALESCE(c.featured, '')) = 'yes' THEN 1 ELSE 0 END) AS featured_count
+                        FROM coupons c
+                        LEFT JOIN stores s ON s.name = c.store
+                        WHERE {where_sql}
+                        GROUP BY
+                            c.store,
+                            s.id,
+                            s.name,
+                            s.primary_location,
+                            s.url,
+                            s.logo_horizontal_url,
+                            s.logo_square_url,
+                            s.authority_tier,
+                            s.category_hint,
+                            s.initial_rank_score
+                        ORDER BY
+                            COUNT(1) DESC,
+                            MAX(COALESCE(s.initial_rank_score, 0)) DESC,
+                            MAX(COALESCE(c.rating, 0)) DESC,
+                            c.store ASC
+                        LIMIT %s OFFSET %s
                         """,
-                        params,
+                        [*params, normalized_limit, offset],
                     )
-                    total = int((cursor.fetchone() or {}).get("total") or 0)
+                    rows = cursor.fetchall()
+                    location_lookup = self._load_location_lookup(cursor)
 
-                cursor.execute(
-                    f"""
-                    SELECT
-                        c.store AS store_name,
-                        COALESCE(s.name, c.store) AS canonical_name,
-                        s.id AS store_id,
-                        s.primary_location AS store_primary_location,
-                        MAX(c.primary_location) AS coupon_primary_location,
-                        MAX(c.locations) AS coupon_locations,
-                        MAX(COALESCE(c.standard_categories, c.categories, '')) AS coupon_categories,
-                        s.url,
-                        s.logo_horizontal_url,
-                        s.logo_square_url,
-                        s.authority_tier,
-                        s.category_hint,
-                        s.initial_rank_score,
-                        COUNT(1) AS coupon_count,
-                        MAX(COALESCE(c.rating, 0)) AS max_rating,
-                        SUM(CASE WHEN LOWER(COALESCE(c.featured, '')) = 'yes' THEN 1 ELSE 0 END) AS featured_count
-                    FROM coupons c
-                    LEFT JOIN stores s ON s.name = c.store
-                    WHERE {where_sql}
-                    GROUP BY
-                        c.store,
-                        s.id,
-                        s.name,
-                        s.primary_location,
-                        s.url,
-                        s.logo_horizontal_url,
-                        s.logo_square_url,
-                        s.authority_tier,
-                        s.category_hint,
-                        s.initial_rank_score
-                    ORDER BY
-                        COUNT(1) DESC,
-                        MAX(COALESCE(s.initial_rank_score, 0)) DESC,
-                        MAX(COALESCE(c.rating, 0)) DESC,
-                        c.store ASC
-                    LIMIT %s OFFSET %s
-                    """,
-                    [*params, normalized_limit, offset],
-                )
-                rows = cursor.fetchall()
-                location_lookup = self._load_location_lookup(cursor)
-
-            items = [
-                self._build_store_summary_record(row, location_lookup, force_featured=featured is True)
-                for row in rows
-            ]
-            if not should_count_total:
-                total = offset + len(items)
-            return self._write_direct_cache(cache_key, (items, total))
-        finally:
-            connection.close()
+                items = [
+                    self._build_store_summary_record(row, location_lookup, force_featured=featured is True)
+                    for row in rows
+                ]
+                if not should_count_total:
+                    total = offset + len(items)
+                return self._write_direct_cache(cache_key, (items, total))
+            finally:
+                connection.close()
+        except Exception:
+            precomputed_page = self._fallback_precomputed_store_page(
+                query=query,
+                category=category,
+                location=location,
+                featured=featured,
+                starts_with=starts_with,
+                page=page,
+                limit=limit,
+            )
+            if precomputed_page is not None:
+                return self._write_direct_cache(cache_key, precomputed_page)
+            raise
 
     def _store_row_by_identifier(self, identifier: str) -> Optional[Dict[str, Any]]:
         target = _clean_text(identifier).lower()
@@ -1501,17 +1667,39 @@ class CouponLeoRepository:
         page: int = 1,
         limit: int = 48,
     ) -> tuple[List[Dict[str, Any]], int]:
-        if not _clean_text(location):
-            precomputed_categories = self._load_precomputed_summary("categories-summary.json")
-            if precomputed_categories is not None:
-                filtered_items = self._filter_precomputed_category_items(precomputed_categories, query=query)
-                total = len(filtered_items)
-                normalized_page = max(1, int(page or 1))
-                normalized_limit = max(1, int(limit or 48))
-                start = (normalized_page - 1) * normalized_limit
-                return deepcopy(filtered_items[start:start + normalized_limit]), total
+        if self._prefer_precomputed_summaries:
+            precomputed_page = self._fallback_precomputed_category_page(
+                query=query,
+                location=location,
+                page=page,
+                limit=limit,
+            )
+            if precomputed_page is not None:
+                return precomputed_page
 
-        items = self._aggregate_category_rows(query=query, location=location)
+        if not self._direct_catalog_mode():
+            precomputed_page = self._fallback_precomputed_category_page(
+                query=query,
+                location=location,
+                page=page,
+                limit=limit,
+            )
+            if precomputed_page is not None:
+                return precomputed_page
+
+        try:
+            items = self._aggregate_category_rows(query=query, location=location)
+        except Exception:
+            precomputed_page = self._fallback_precomputed_category_page(
+                query=query,
+                location=location,
+                page=page,
+                limit=limit,
+            )
+            if precomputed_page is not None:
+                return precomputed_page
+            raise
+
         total = len(items)
         normalized_page = max(1, int(page or 1))
         normalized_limit = max(1, int(limit or 48))
@@ -1520,24 +1708,24 @@ class CouponLeoRepository:
 
     def get_category_live(self, identifier: str) -> Optional[Dict[str, Any]]:
         target = _clean_text(identifier).lower()
-        precomputed_categories = self._load_precomputed_summary("categories-summary.json")
-        if precomputed_categories is not None:
-            for item in precomputed_categories:
+
+        if self._prefer_precomputed_summaries:
+            precomputed_item = self._fallback_precomputed_category_item(identifier)
+            if precomputed_item is not None:
+                return precomputed_item
+
+        try:
+            for item in self._aggregate_category_rows():
                 if target in {
                     _clean_text(item.get("id")).lower(),
                     _clean_text(item.get("slug")).lower(),
                     _clean_text(item.get("name")).lower(),
                 }:
                     return deepcopy(item)
+        except Exception:
+            pass
 
-        for item in self._aggregate_category_rows():
-            if target in {
-                _clean_text(item.get("id")).lower(),
-                _clean_text(item.get("slug")).lower(),
-                _clean_text(item.get("name")).lower(),
-            }:
-                return deepcopy(item)
-        return None
+        return self._fallback_precomputed_category_item(identifier)
 
     def _aggregate_location_rows(self, query: str = "") -> List[Dict[str, Any]]:
         cache_key = ("live-location-rows", _clean_text(query).lower())
@@ -1609,25 +1797,24 @@ class CouponLeoRepository:
         page: int = 1,
         limit: int = 48,
     ) -> tuple[List[Dict[str, Any]], int]:
-        precomputed_locations = self._load_precomputed_summary("locations-summary.json")
-        if precomputed_locations is not None:
-            query_term = _clean_text(query).lower()
-            filtered_items = (
-                [
-                    item
-                    for item in precomputed_locations
-                    if query_term in f"{item.get('name', '')} {item.get('code', '')} {item.get('spotlight', '')}".lower()
-                ]
-                if query_term
-                else precomputed_locations
-            )
-            total = len(filtered_items)
-            normalized_page = max(1, int(page or 1))
-            normalized_limit = max(1, int(limit or 48))
-            start = (normalized_page - 1) * normalized_limit
-            return deepcopy(filtered_items[start:start + normalized_limit]), total
+        if self._prefer_precomputed_summaries:
+            precomputed_page = self._fallback_precomputed_location_page(query=query, page=page, limit=limit)
+            if precomputed_page is not None:
+                return precomputed_page
 
-        items = self._aggregate_location_rows(query=query)
+        if not self._direct_catalog_mode():
+            precomputed_page = self._fallback_precomputed_location_page(query=query, page=page, limit=limit)
+            if precomputed_page is not None:
+                return precomputed_page
+
+        try:
+            items = self._aggregate_location_rows(query=query)
+        except Exception:
+            precomputed_page = self._fallback_precomputed_location_page(query=query, page=page, limit=limit)
+            if precomputed_page is not None:
+                return precomputed_page
+            raise
+
         total = len(items)
         normalized_page = max(1, int(page or 1))
         normalized_limit = max(1, int(limit or 48))
