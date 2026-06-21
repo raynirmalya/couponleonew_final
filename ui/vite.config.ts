@@ -6,7 +6,7 @@ import { defineConfig } from 'vite';
 import analog from '@analogjs/platform';
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
-const iconsPackagePath = resolve(rootDir, '../eonui_ultimate/eonui/packages/icons');
+const iconsPackagePath = resolve(rootDir, '../../revamp/eonui_ultimate/eonui/packages/icons');
 
 function eonIconRawStubPlugin() {
   return {

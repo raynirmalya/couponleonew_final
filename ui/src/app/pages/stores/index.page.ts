@@ -1,8 +1,7 @@
-import { isPlatformBrowser } from '@angular/common';
-import { Component, DestroyRef, PLATFORM_ID, computed, effect, inject, signal, untracked } from '@angular/core';
-import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { finalize, map, startWith, switchMap } from 'rxjs';
+import { debounceTime, distinctUntilChanged, finalize, map, switchMap } from 'rxjs';
 import { CouponleoEonIconComponent } from '../../components/couponleo-eon-icon.component';
 import { CouponleoFavoriteButtonComponent } from '../../components/couponleo-favorite-button.component';
 import { CouponleoPageLoaderComponent } from '../../components/couponleo-page-loader.component';
@@ -11,6 +10,7 @@ import {
   CouponleoApiService,
   type CouponleoCategory,
   type CouponleoLocation,
+  type CouponleoStoreAnalytics,
   type CouponleoStore,
 } from '../../services/couponleo-api.service';
 import { createLoadingState, withRequestState } from '../../services/couponleo-request-state.helpers';
@@ -25,9 +25,6 @@ import {
   locationFilterForCountry,
   matchesCountry,
   normalizeCountryRouteValue,
-  pageCountFor,
-  paginateItems,
-  slugifyLabel,
 } from '../../services/couponleo-ui.helpers';
 
 import buildingStoreIconSvg from '@eonui/icons/svg/maps/eon-building-store.svg?raw';
@@ -79,35 +76,24 @@ const alphabet = ['All', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '#'];
 const storesPageSize = 6;
 
 function emptyListResponse<T>() {
-  return { items: [] as T[], total: 0 };
+  return {
+    items: [] as T[],
+    total: 0,
+    page: 1,
+    pageSize: 0,
+    pageCount: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  };
 }
 
-function matchesStoreQuery(store: CouponleoStore, query: string): boolean {
-  if (!query) {
-    return true;
-  }
-
-  const normalizedQuery = query.toLowerCase();
-  return [
-    store.name,
-    store.headline,
-    store.category,
-    store.location,
-    store.savings,
-  ].some((value) => value.toLowerCase().includes(normalizedQuery));
-}
-
-function matchesLetterFilter(name: string, letter: string): boolean {
-  if (letter === 'All') {
-    return true;
-  }
-
-  const firstCharacter = name.trim().charAt(0).toUpperCase();
-  if (letter === '#') {
-    return !/[A-Z]/.test(firstCharacter);
-  }
-
-  return firstCharacter === letter;
+function emptyStoreAnalytics(): CouponleoStoreAnalytics {
+  return {
+    totalCoupons: 0,
+    totalStores: 0,
+    featuredCoupons: 0,
+    liveMarkets: 0,
+  };
 }
 
 function storeInitials(name: string): string {
@@ -149,7 +135,7 @@ function proxiedStoreLogoUrl(url: string): string {
   try {
     const parsed = new URL(url);
     if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return `/api/logo?url=${encodeURIComponent(parsed.toString())}`;
+      return parsed.toString();
     }
   } catch {
     return url;
@@ -1082,41 +1068,84 @@ export default class StoresPage {
   private readonly api = inject(CouponleoApiService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly i18n = inject(CouponleoI18nService);
-  private readonly platformId = inject(PLATFORM_ID);
   private readonly route = inject(ActivatedRoute);
   private readonly savedService = inject(CouponleoSavedService);
-  private readonly browser = isPlatformBrowser(this.platformId);
   private readonly initialCountry = normalizeCountryRouteValue(this.route.snapshot.queryParamMap.get('country'));
   private readonly countryQueryParamMap = this.route.queryParamMap.pipe(
     map((params) => normalizeCountryRouteValue(params.get('country'))),
   );
+  protected readonly searchQuery = signal('');
+  protected readonly categorySearchQuery = signal('');
+  protected readonly selectedCountry = toSignal(this.countryQueryParamMap, { initialValue: this.initialCountry });
+  protected readonly countryRouteQuery = computed(() => buildCountryRouteQuery(this.selectedCountry()));
+  protected readonly selectedCategory = signal('all');
+  protected readonly selectedLetter = signal('All');
+  protected readonly storePage = signal(1);
+  private readonly storeDirectoryRequest = computed(() => ({
+    country: this.selectedCountry(),
+    query: this.searchQuery().trim(),
+    category: this.selectedCategory(),
+    letter: this.selectedLetter(),
+    page: this.storePage(),
+  }));
 
   private readonly categoriesState = toSignal(
-    withRequestState(this.api.listCategories({ pageSize: 50 }), emptyListResponse<CouponleoCategory>()),
+    withRequestState(this.api.listCategories({ pageSize: 120 }), emptyListResponse<CouponleoCategory>()),
     { initialValue: createLoadingState(emptyListResponse<CouponleoCategory>()) },
   );
-  private readonly storesState = toSignal(
-    this.countryQueryParamMap.pipe(
-      startWith(this.initialCountry),
+  private readonly featuredStoresState = toSignal(
+    toObservable(this.selectedCountry).pipe(
       switchMap((country) => {
         const location = locationFilterForCountry(country);
 
         return withRequestState(
-          this.browser
-            ? this.api.listAllStores(location ? { location } : {})
-            : this.api.listStores({
-              location,
-              pageSize: 120,
-            }),
+          this.api.listStores({
+            location,
+            featured: true,
+            pageSize: 12,
+          }),
           emptyListResponse<CouponleoStore>(),
         );
       }),
     ),
     { initialValue: createLoadingState(emptyListResponse<CouponleoStore>()) },
   );
+  private readonly directoryStoresState = toSignal(
+    toObservable(this.storeDirectoryRequest).pipe(
+      debounceTime(120),
+      distinctUntilChanged((left, right) => (
+        left.country === right.country
+        && left.query === right.query
+        && left.category === right.category
+        && left.letter === right.letter
+        && left.page === right.page
+      )),
+      switchMap(({ country, query, category, letter, page }) => (
+        withRequestState(
+          this.api.listStores({
+            location: locationFilterForCountry(country),
+            q: query,
+            category: category === 'all' ? '' : category,
+            startsWith: letter === 'All' ? '' : letter,
+            page,
+            pageSize: storesPageSize,
+          }),
+          emptyListResponse<CouponleoStore>(),
+        )
+      )),
+    ),
+    { initialValue: createLoadingState(emptyListResponse<CouponleoStore>()) },
+  );
   private readonly locationsState = toSignal(
     withRequestState(this.api.listLocations({ pageSize: 120 }), emptyListResponse<CouponleoLocation>()),
     { initialValue: createLoadingState(emptyListResponse<CouponleoLocation>()) },
+  );
+  private readonly analyticsState = toSignal(
+    withRequestState(
+      this.api.getStoreAnalytics().pipe(map((response) => response.data)),
+      emptyStoreAnalytics(),
+    ),
+    { initialValue: createLoadingState(emptyStoreAnalytics()) },
   );
 
   protected readonly searchIconSvg = searchIconSvg;
@@ -1154,79 +1183,42 @@ export default class StoresPage {
     featuredStore: this.i18n.phrase('Featured store'),
   }));
 
-  protected readonly searchQuery = signal('');
-  protected readonly categorySearchQuery = signal('');
-  protected readonly selectedCountry = toSignal(this.countryQueryParamMap, { initialValue: this.initialCountry });
-  protected readonly countryRouteQuery = computed(() => buildCountryRouteQuery(this.selectedCountry()));
-  protected readonly selectedCategory = signal('all');
-  protected readonly selectedLetter = signal('All');
-  protected readonly storePage = signal(1);
   private readonly storeLogoFallbacks = signal<Record<string, string>>({});
   private readonly blockedStoreLogoUrls = signal(new Set<string>());
   private readonly loadingStoreLogoIds = new Set<string>();
   protected readonly isLoading = computed(() => (
     this.categoriesState().loading
-    || this.storesState().loading
     || this.locationsState().loading
+    || this.analyticsState().loading
+    || (this.featuredStoresState().loading && this.featuredStoresResponse().items.length === 0)
+    || (this.directoryStoresState().loading && this.directoryStoresResponse().items.length === 0)
   ));
 
   private readonly categoriesResponse = computed(() => this.categoriesState().data);
-  private readonly storesResponse = computed(() => this.storesState().data);
+  private readonly featuredStoresResponse = computed(() => this.featuredStoresState().data);
+  private readonly directoryStoresResponse = computed(() => this.directoryStoresState().data);
   private readonly locationsResponse = computed(() => this.locationsState().data);
-
-  private readonly countryStores = computed(() => (
-    this.storesResponse().items.filter((store) => matchesCountry(this.selectedCountry(), store.location))
-  ));
-
-  private readonly categorySlugByName = computed(() => (
-    new Map(this.categoriesResponse().items.map((category) => [category.name.toLowerCase(), category.slug]))
-  ));
-
-  private readonly featuredCountryStores = computed(() => (
-    [...this.countryStores()]
-      .filter((store) => store.featured)
-      .sort((left, right) => right.activeCoupons - left.activeCoupons || left.name.localeCompare(right.name))
-  ));
-
-  private readonly filteredDirectoryStores = computed(() => {
-    const query = this.searchQuery().trim();
-
-    return [...this.countryStores()]
-      .filter((store) => (
-        this.selectedCategory() === 'all'
-        || this.categorySlugByName().get(store.category.toLowerCase()) === this.selectedCategory()
-        || slugifyLabel(store.category) === this.selectedCategory()
-      ))
-      .filter((store) => matchesLetterFilter(store.name, this.selectedLetter()))
-      .filter((store) => matchesStoreQuery(store, query))
-      .sort((left, right) => right.activeCoupons - left.activeCoupons || left.name.localeCompare(right.name));
-  });
-
-  protected readonly browseCategories = computed<StoreSidebarCategory[]>(() => {
-    const counts = new Map<string, { name: string; slug: string; count: number }>();
-
-    for (const store of this.countryStores()) {
-      const slug = this.categorySlugByName().get(store.category.toLowerCase()) ?? slugifyLabel(store.category);
-      const current = counts.get(slug);
-
-      if (current) {
-        current.count += 1;
-        continue;
-      }
-
-      counts.set(slug, {
-        name: store.category,
-        slug,
-        count: 1,
-      });
+  private readonly analyticsResponse = computed(() => this.analyticsState().data);
+  private readonly selectedLocationSummary = computed(() => {
+    if (this.selectedCountry() === 'all') {
+      return null;
     }
 
-    return [...counts.values()]
-      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name))
+    return this.locationsResponse().items.find((location) => matchesCountry(this.selectedCountry(), location.name)) ?? null;
+  });
+  private readonly hasStoreFilters = computed(() => (
+    Boolean(this.searchQuery().trim())
+    || this.selectedCategory() !== 'all'
+    || this.selectedLetter() !== 'All'
+  ));
+
+  protected readonly browseCategories = computed<StoreSidebarCategory[]>(() => {
+    return [...this.categoriesResponse().items]
+      .sort((left, right) => (right.storeCount ?? 0) - (left.storeCount ?? 0) || left.name.localeCompare(right.name))
       .map((category) => ({
         name: category.name,
         slug: category.slug,
-        count: this.i18n.formatNumber(category.count),
+        count: this.i18n.formatNumber(category.storeCount ?? 0),
         icon: getCategoryPresentation(category.slug).icon,
       }));
   });
@@ -1240,36 +1232,53 @@ export default class StoresPage {
     return this.browseCategories().filter((category) => category.name.toLowerCase().includes(query));
   });
 
-  protected readonly featuredStoreCount = computed(() => this.i18n.formatNumber(this.featuredCountryStores().length));
+  protected readonly featuredStoreCount = computed(() => this.i18n.formatNumber(
+    this.featuredStoresResponse().total || this.featuredStoresResponse().items.length,
+  ));
   protected readonly featuredStores = computed<StoreCardViewModel[]>(() => {
-    const storesToShow = this.featuredCountryStores().length > 0
-      ? this.featuredCountryStores()
-      : this.countryStores();
+    const featuredStores = this.featuredStoresResponse().items;
+    const storesToShow = featuredStores.length > 0
+      ? featuredStores
+      : this.directoryStoresResponse().items;
 
     return [...storesToShow]
       .slice(0, 12)
       .map((store) => this.localizeStoreCard(toStoreCardViewModel(store)));
   });
 
-  protected readonly countryCouponTotal = computed(() => (
-    this.countryStores().reduce((total, store) => total + store.activeCoupons, 0)
-  ));
-  protected readonly totalStoreCount = computed(() => this.storesResponse().total || this.countryStores().length);
-  protected readonly storeDirectoryTotal = computed(() => this.filteredDirectoryStores().length);
-  protected readonly storePageCount = computed(() => pageCountFor(this.filteredDirectoryStores().length, storesPageSize));
+  protected readonly countryCouponTotal = computed(() => {
+    if (this.selectedCountry() === 'all') {
+      return this.analyticsResponse().totalCoupons || 0;
+    }
+
+    return this.selectedLocationSummary()?.couponCount ?? 0;
+  });
+  protected readonly totalStoreCount = computed(() => {
+    if (this.hasStoreFilters()) {
+      return this.directoryStoresResponse().total || this.directoryStoresResponse().items.length;
+    }
+
+    if (this.selectedCountry() === 'all') {
+      return this.directoryStoresResponse().total || 0;
+    }
+
+    return this.selectedLocationSummary()?.storeCount ?? this.directoryStoresResponse().total ?? 0;
+  });
+  protected readonly storeDirectoryTotal = computed(() => this.directoryStoresResponse().total || this.directoryStoresResponse().items.length);
+  protected readonly storePageCount = computed(() => this.directoryStoresResponse().pageCount ?? 1);
   protected readonly pagedStores = computed<StoreCardViewModel[]>(() => (
-    paginateItems(this.filteredDirectoryStores(), this.storePage(), storesPageSize).map((store) => this.localizeStoreCard(toStoreCardViewModel(store)))
+    this.directoryStoresResponse().items.map((store) => this.localizeStoreCard(toStoreCardViewModel(store)))
   ));
 
   protected readonly stats = computed<StoreStat[]>(() => {
     const marketCount = this.selectedCountry() === 'all'
-      ? (this.locationsResponse().total || this.locationsResponse().items.length)
-      : (this.countryStores().length > 0 ? 1 : 0);
+      ? (this.analyticsResponse().liveMarkets || this.locationsResponse().total || this.locationsResponse().items.length)
+      : (this.selectedLocationSummary() ? 1 : 0);
 
     return [
       { value: this.i18n.formatNumber(this.totalStoreCount()), label: this.labels().stores, icon: buildingStoreIconSvg },
       { value: this.i18n.formatNumber(this.countryCouponTotal()), label: this.labels().coupons, icon: tagIconSvg },
-      { value: this.i18n.formatNumber(this.featuredCountryStores().length), label: this.labels().featured, icon: shieldCheckIconSvg },
+      { value: this.featuredStoreCount(), label: this.labels().featured, icon: shieldCheckIconSvg },
       { value: this.i18n.formatNumber(marketCount), label: this.labels().markets, icon: shieldLockIconSvg },
     ];
   });
@@ -1279,6 +1288,7 @@ export default class StoresPage {
       this.selectedCountry();
       untracked(() => {
         this.selectedCategory.set('all');
+        this.selectedLetter.set('All');
         this.storePage.set(1);
       });
     });

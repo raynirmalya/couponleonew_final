@@ -18,6 +18,6 @@ export const appConfig: ApplicationConfig = {
       withInterceptors([requestContextInterceptor])
     ),
     provideClientHydration(withEventReplay()),
-    { provide: COUPONLEO_API_BASE_URL, useValue: 'http://127.0.0.1:5000/couponleo/api' },
+    { provide: COUPONLEO_API_BASE_URL, useValue: '/couponleo/api' },
   ],
 };

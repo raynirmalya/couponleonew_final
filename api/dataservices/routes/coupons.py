@@ -75,6 +75,7 @@ def search_coupons():
 @coupons_bp.get("/store/<store_slug>")
 def coupons_by_store(store_slug: str):
     return _coupon_response(store=store_slug)
+<<<<<<< HEAD
 
 
 @coupons_bp.get("/<identifier>")
@@ -106,3 +107,36 @@ def delete_coupon(identifier: str):
     if not deleted:
         abort(404, description="Coupon not found.")
     return jsonify({"deleted": True})
+=======
+
+
+@coupons_bp.get("/<identifier>")
+def get_coupon(identifier: str):
+    item = repository.get_coupon_live(identifier)
+    if item is None:
+        abort(404, description="Coupon not found.")
+    return jsonify({"data": item})
+
+
+@coupons_bp.post("")
+@coupons_bp.post("/")
+def create_coupon():
+    item = repository.create_item("coupons", _payload())
+    return jsonify({"data": item}), 201
+
+
+@coupons_bp.put("/<identifier>")
+def update_coupon(identifier: str):
+    item = repository.update_item("coupons", identifier, _payload())
+    if item is None:
+        abort(404, description="Coupon not found.")
+    return jsonify({"data": item})
+
+
+@coupons_bp.delete("/<identifier>")
+def delete_coupon(identifier: str):
+    deleted = repository.delete_item("coupons", identifier)
+    if not deleted:
+        abort(404, description="Coupon not found.")
+    return jsonify({"deleted": True})
+>>>>>>> 867be0aaf6163b6277728517b306af14707a34c0

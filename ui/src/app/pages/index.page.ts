@@ -334,7 +334,7 @@ export default class Home {
     { initialValue: createLoadingState(emptyListResponse<CouponleoCoupon>()) },
   );
   private readonly categoriesState = toSignal(
-    withRequestState(this.api.listCategories({ pageSize: 120 }), emptyListResponse<CouponleoCategory>()),
+    withRequestState(this.api.listCategories({ pageSize: 1000 }), emptyListResponse<CouponleoCategory>()),
     { initialValue: createLoadingState(emptyListResponse<CouponleoCategory>()) },
   );
   private readonly featuredCouponsState = toSignal(
@@ -357,6 +357,7 @@ export default class Home {
       startWith(this.initialCountry),
       switchMap((country) => withRequestState(
         this.api.listStores({
+          featured: true,
           location: locationFilterForCountry(country),
           pageSize: 120,
         }),

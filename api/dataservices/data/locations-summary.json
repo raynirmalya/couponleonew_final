@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [
   {
     "id": "US",
@@ -782,4 +783,790 @@
     "storeCount": 1,
     "spotlight": "1 live coupons across 1 stores."
   }
+=======
+[
+  {
+    "id": "US",
+    "name": "United States of America",
+    "code": "US",
+    "country": "United States of America",
+    "couponCount": 137083,
+    "storeCount": 3642,
+    "spotlight": "137083 live coupons across 3642 stores."
+  },
+  {
+    "id": "GLOBAL",
+    "name": "Global",
+    "code": "GLOBAL",
+    "country": "Global",
+    "couponCount": 68803,
+    "storeCount": 1384,
+    "spotlight": "68803 live coupons across 1384 stores."
+  },
+  {
+    "id": "GB",
+    "name": "United Kingdom",
+    "code": "GB",
+    "country": "United Kingdom",
+    "couponCount": 17741,
+    "storeCount": 1078,
+    "spotlight": "17741 live coupons across 1078 stores."
+  },
+  {
+    "id": "AU",
+    "name": "Australia",
+    "code": "AU",
+    "country": "Australia",
+    "couponCount": 12610,
+    "storeCount": 353,
+    "spotlight": "12610 live coupons across 353 stores."
+  },
+  {
+    "id": "DE",
+    "name": "Germany",
+    "code": "DE",
+    "country": "Germany",
+    "couponCount": 11408,
+    "storeCount": 831,
+    "spotlight": "11408 live coupons across 831 stores."
+  },
+  {
+    "id": "CA",
+    "name": "Canada",
+    "code": "CA",
+    "country": "Canada",
+    "couponCount": 7635,
+    "storeCount": 236,
+    "spotlight": "7635 live coupons across 236 stores."
+  },
+  {
+    "id": "IT",
+    "name": "Italy",
+    "code": "IT",
+    "country": "Italy",
+    "couponCount": 3270,
+    "storeCount": 220,
+    "spotlight": "3270 live coupons across 220 stores."
+  },
+  {
+    "id": "RU",
+    "name": "Russia",
+    "code": "RU",
+    "country": "Russia",
+    "couponCount": 2959,
+    "storeCount": 156,
+    "spotlight": "2959 live coupons across 156 stores."
+  },
+  {
+    "id": "VN",
+    "name": "Vietnam",
+    "code": "VN",
+    "country": "Vietnam",
+    "couponCount": 2871,
+    "storeCount": 119,
+    "spotlight": "2871 live coupons across 119 stores."
+  },
+  {
+    "id": "ES",
+    "name": "Spain",
+    "code": "ES",
+    "country": "Spain",
+    "couponCount": 2850,
+    "storeCount": 169,
+    "spotlight": "2850 live coupons across 169 stores."
+  },
+  {
+    "id": "IN",
+    "name": "India",
+    "code": "IN",
+    "country": "India",
+    "couponCount": 2571,
+    "storeCount": 193,
+    "spotlight": "2571 live coupons across 193 stores."
+  },
+  {
+    "id": "FR",
+    "name": "France",
+    "code": "FR",
+    "country": "France",
+    "couponCount": 2384,
+    "storeCount": 225,
+    "spotlight": "2384 live coupons across 225 stores."
+  },
+  {
+    "id": "NL",
+    "name": "Netherlands",
+    "code": "NL",
+    "country": "Netherlands",
+    "couponCount": 1934,
+    "storeCount": 149,
+    "spotlight": "1934 live coupons across 149 stores."
+  },
+  {
+    "id": "MX",
+    "name": "Mexico",
+    "code": "MX",
+    "country": "Mexico",
+    "couponCount": 1880,
+    "storeCount": 35,
+    "spotlight": "1880 live coupons across 35 stores."
+  },
+  {
+    "id": "CZ",
+    "name": "Czech Republic",
+    "code": "CZ",
+    "country": "Czech Republic",
+    "couponCount": 1708,
+    "storeCount": 132,
+    "spotlight": "1708 live coupons across 132 stores."
+  },
+  {
+    "id": "CN",
+    "name": "China",
+    "code": "CN",
+    "country": "China",
+    "couponCount": 1439,
+    "storeCount": 18,
+    "spotlight": "1439 live coupons across 18 stores."
+  },
+  {
+    "id": "PL",
+    "name": "Poland",
+    "code": "PL",
+    "country": "Poland",
+    "couponCount": 1348,
+    "storeCount": 150,
+    "spotlight": "1348 live coupons across 150 stores."
+  },
+  {
+    "id": "BR",
+    "name": "Brazil",
+    "code": "BR",
+    "country": "Brazil",
+    "couponCount": 1301,
+    "storeCount": 108,
+    "spotlight": "1301 live coupons across 108 stores."
+  },
+  {
+    "id": "SG",
+    "name": "Singapore",
+    "code": "SG",
+    "country": "Singapore",
+    "couponCount": 1243,
+    "storeCount": 26,
+    "spotlight": "1243 live coupons across 26 stores."
+  },
+  {
+    "id": "PH",
+    "name": "Philippines",
+    "code": "PH",
+    "country": "Philippines",
+    "couponCount": 1195,
+    "storeCount": 25,
+    "spotlight": "1195 live coupons across 25 stores."
+  },
+  {
+    "id": "BE",
+    "name": "Belgium",
+    "code": "BE",
+    "country": "Belgium",
+    "couponCount": 1100,
+    "storeCount": 54,
+    "spotlight": "1100 live coupons across 54 stores."
+  },
+  {
+    "id": "HK",
+    "name": "Hong Kong",
+    "code": "HK",
+    "country": "Hong Kong",
+    "couponCount": 979,
+    "storeCount": 25,
+    "spotlight": "979 live coupons across 25 stores."
+  },
+  {
+    "id": "PT",
+    "name": "Portugal",
+    "code": "PT",
+    "country": "Portugal",
+    "couponCount": 821,
+    "storeCount": 40,
+    "spotlight": "821 live coupons across 40 stores."
+  },
+  {
+    "id": "ID",
+    "name": "Indonesia",
+    "code": "ID",
+    "country": "Indonesia",
+    "couponCount": 806,
+    "storeCount": 20,
+    "spotlight": "806 live coupons across 20 stores."
+  },
+  {
+    "id": "EU",
+    "name": "European Union",
+    "code": "EU",
+    "country": "European Union",
+    "couponCount": 740,
+    "storeCount": 40,
+    "spotlight": "740 live coupons across 40 stores."
+  },
+  {
+    "id": "CH",
+    "name": "Switzerland",
+    "code": "CH",
+    "country": "Switzerland",
+    "couponCount": 737,
+    "storeCount": 89,
+    "spotlight": "737 live coupons across 89 stores."
+  },
+  {
+    "id": "AE",
+    "name": "United Arab Emirates",
+    "code": "AE",
+    "country": "United Arab Emirates",
+    "couponCount": 726,
+    "storeCount": 36,
+    "spotlight": "726 live coupons across 36 stores."
+  },
+  {
+    "id": "IE",
+    "name": "Ireland",
+    "code": "IE",
+    "country": "Ireland",
+    "couponCount": 590,
+    "storeCount": 34,
+    "spotlight": "590 live coupons across 34 stores."
+  },
+  {
+    "id": "SE",
+    "name": "Sweden",
+    "code": "SE",
+    "country": "Sweden",
+    "couponCount": 587,
+    "storeCount": 42,
+    "spotlight": "587 live coupons across 42 stores."
+  },
+  {
+    "id": "MY",
+    "name": "Malaysia",
+    "code": "MY",
+    "country": "Malaysia",
+    "couponCount": 558,
+    "storeCount": 21,
+    "spotlight": "558 live coupons across 21 stores."
+  },
+  {
+    "id": "GR",
+    "name": "Greece",
+    "code": "GR",
+    "country": "Greece",
+    "couponCount": 551,
+    "storeCount": 36,
+    "spotlight": "551 live coupons across 36 stores."
+  },
+  {
+    "id": "AT",
+    "name": "Austria",
+    "code": "AT",
+    "country": "Austria",
+    "couponCount": 500,
+    "storeCount": 72,
+    "spotlight": "500 live coupons across 72 stores."
+  },
+  {
+    "id": "NZ",
+    "name": "New Zealand",
+    "code": "NZ",
+    "country": "New Zealand",
+    "couponCount": 478,
+    "storeCount": 32,
+    "spotlight": "478 live coupons across 32 stores."
+  },
+  {
+    "id": "PK",
+    "name": "Pakistan",
+    "code": "PK",
+    "country": "Pakistan",
+    "couponCount": 396,
+    "storeCount": 10,
+    "spotlight": "396 live coupons across 10 stores."
+  },
+  {
+    "id": "UA",
+    "name": "Ukraine",
+    "code": "UA",
+    "country": "Ukraine",
+    "couponCount": 356,
+    "storeCount": 22,
+    "spotlight": "356 live coupons across 22 stores."
+  },
+  {
+    "id": "DK",
+    "name": "Denmark",
+    "code": "DK",
+    "country": "Denmark",
+    "couponCount": 355,
+    "storeCount": 23,
+    "spotlight": "355 live coupons across 23 stores."
+  },
+  {
+    "id": "HU",
+    "name": "Hungary",
+    "code": "HU",
+    "country": "Hungary",
+    "couponCount": 335,
+    "storeCount": 19,
+    "spotlight": "335 live coupons across 19 stores."
+  },
+  {
+    "id": "JP",
+    "name": "Japan",
+    "code": "JP",
+    "country": "Japan",
+    "couponCount": 310,
+    "storeCount": 19,
+    "spotlight": "310 live coupons across 19 stores."
+  },
+  {
+    "id": "TW",
+    "name": "Taiwan",
+    "code": "TW",
+    "country": "Taiwan",
+    "couponCount": 279,
+    "storeCount": 19,
+    "spotlight": "279 live coupons across 19 stores."
+  },
+  {
+    "id": "SK",
+    "name": "Slovakia",
+    "code": "SK",
+    "country": "Slovakia",
+    "couponCount": 232,
+    "storeCount": 65,
+    "spotlight": "232 live coupons across 65 stores."
+  },
+  {
+    "id": "FI",
+    "name": "Finland",
+    "code": "FI",
+    "country": "Finland",
+    "couponCount": 224,
+    "storeCount": 19,
+    "spotlight": "224 live coupons across 19 stores."
+  },
+  {
+    "id": "KR",
+    "name": "South Korea",
+    "code": "KR",
+    "country": "South Korea",
+    "couponCount": 183,
+    "storeCount": 13,
+    "spotlight": "183 live coupons across 13 stores."
+  },
+  {
+    "id": "TR",
+    "name": "Turkey",
+    "code": "TR",
+    "country": "Turkey",
+    "couponCount": 164,
+    "storeCount": 7,
+    "spotlight": "164 live coupons across 7 stores."
+  },
+  {
+    "id": "NO",
+    "name": "Norway",
+    "code": "NO",
+    "country": "Norway",
+    "couponCount": 127,
+    "storeCount": 18,
+    "spotlight": "127 live coupons across 18 stores."
+  },
+  {
+    "id": "AG",
+    "name": "Antigua and Barbuda",
+    "code": "AG",
+    "country": "Antigua and Barbuda",
+    "couponCount": 101,
+    "storeCount": 1,
+    "spotlight": "101 live coupons across 1 stores."
+  },
+  {
+    "id": "TH",
+    "name": "Thailand",
+    "code": "TH",
+    "country": "Thailand",
+    "couponCount": 100,
+    "storeCount": 14,
+    "spotlight": "100 live coupons across 14 stores."
+  },
+  {
+    "id": "GG",
+    "name": "Guernsey",
+    "code": "GG",
+    "country": "Guernsey",
+    "couponCount": 90,
+    "storeCount": 2,
+    "spotlight": "90 live coupons across 2 stores."
+  },
+  {
+    "id": "AR",
+    "name": "Argentina",
+    "code": "AR",
+    "country": "Argentina",
+    "couponCount": 85,
+    "storeCount": 3,
+    "spotlight": "85 live coupons across 3 stores."
+  },
+  {
+    "id": "BY",
+    "name": "Belarus",
+    "code": "BY",
+    "country": "Belarus",
+    "couponCount": 83,
+    "storeCount": 7,
+    "spotlight": "83 live coupons across 7 stores."
+  },
+  {
+    "id": "SA",
+    "name": "Saudi Arabia",
+    "code": "SA",
+    "country": "Saudi Arabia",
+    "couponCount": 67,
+    "storeCount": 17,
+    "spotlight": "67 live coupons across 17 stores."
+  },
+  {
+    "id": "PR",
+    "name": "Puerto Rico",
+    "code": "PR",
+    "country": "Puerto Rico",
+    "couponCount": 58,
+    "storeCount": 2,
+    "spotlight": "58 live coupons across 2 stores."
+  },
+  {
+    "id": "RO",
+    "name": "Romania",
+    "code": "RO",
+    "country": "Romania",
+    "couponCount": 54,
+    "storeCount": 12,
+    "spotlight": "54 live coupons across 12 stores."
+  },
+  {
+    "id": "DO",
+    "name": "Dominican Republic",
+    "code": "DO",
+    "country": "Dominican Republic",
+    "couponCount": 32,
+    "storeCount": 2,
+    "spotlight": "32 live coupons across 2 stores."
+  },
+  {
+    "id": "EG",
+    "name": "Egypt",
+    "code": "EG",
+    "country": "Egypt",
+    "couponCount": 27,
+    "storeCount": 6,
+    "spotlight": "27 live coupons across 6 stores."
+  },
+  {
+    "id": "MA",
+    "name": "Morocco",
+    "code": "MA",
+    "country": "Morocco",
+    "couponCount": 25,
+    "storeCount": 1,
+    "spotlight": "25 live coupons across 1 stores."
+  },
+  {
+    "id": "HR",
+    "name": "Croatia",
+    "code": "HR",
+    "country": "Croatia",
+    "couponCount": 21,
+    "storeCount": 6,
+    "spotlight": "21 live coupons across 6 stores."
+  },
+  {
+    "id": "IL",
+    "name": "Israel",
+    "code": "IL",
+    "country": "Israel",
+    "couponCount": 18,
+    "storeCount": 5,
+    "spotlight": "18 live coupons across 5 stores."
+  },
+  {
+    "id": "KW",
+    "name": "Kuwait",
+    "code": "KW",
+    "country": "Kuwait",
+    "couponCount": 17,
+    "storeCount": 3,
+    "spotlight": "17 live coupons across 3 stores."
+  },
+  {
+    "id": "CO",
+    "name": "Colombia",
+    "code": "CO",
+    "country": "Colombia",
+    "couponCount": 16,
+    "storeCount": 4,
+    "spotlight": "16 live coupons across 4 stores."
+  },
+  {
+    "id": "LA",
+    "name": "Laos",
+    "code": "LA",
+    "country": "Laos",
+    "couponCount": 14,
+    "storeCount": 1,
+    "spotlight": "14 live coupons across 1 stores."
+  },
+  {
+    "id": "BG",
+    "name": "Bulgaria",
+    "code": "BG",
+    "country": "Bulgaria",
+    "couponCount": 11,
+    "storeCount": 5,
+    "spotlight": "11 live coupons across 5 stores."
+  },
+  {
+    "id": "KZ",
+    "name": "Kazakhstan",
+    "code": "KZ",
+    "country": "Kazakhstan",
+    "couponCount": 9,
+    "storeCount": 1,
+    "spotlight": "9 live coupons across 1 stores."
+  },
+  {
+    "id": "OM",
+    "name": "Oman",
+    "code": "OM",
+    "country": "Oman",
+    "couponCount": 9,
+    "storeCount": 1,
+    "spotlight": "9 live coupons across 1 stores."
+  },
+  {
+    "id": "ZA",
+    "name": "South Africa",
+    "code": "ZA",
+    "country": "South Africa",
+    "couponCount": 9,
+    "storeCount": 2,
+    "spotlight": "9 live coupons across 2 stores."
+  },
+  {
+    "id": "UY",
+    "name": "Uruguay",
+    "code": "UY",
+    "country": "Uruguay",
+    "couponCount": 9,
+    "storeCount": 1,
+    "spotlight": "9 live coupons across 1 stores."
+  },
+  {
+    "id": "LV",
+    "name": "Latvia",
+    "code": "LV",
+    "country": "Latvia",
+    "couponCount": 8,
+    "storeCount": 4,
+    "spotlight": "8 live coupons across 4 stores."
+  },
+  {
+    "id": "PY",
+    "name": "Paraguay",
+    "code": "PY",
+    "country": "Paraguay",
+    "couponCount": 8,
+    "storeCount": 1,
+    "spotlight": "8 live coupons across 1 stores."
+  },
+  {
+    "id": "LT",
+    "name": "Lithuania",
+    "code": "LT",
+    "country": "Lithuania",
+    "couponCount": 7,
+    "storeCount": 4,
+    "spotlight": "7 live coupons across 4 stores."
+  },
+  {
+    "id": "SI",
+    "name": "Slovenia",
+    "code": "SI",
+    "country": "Slovenia",
+    "couponCount": 7,
+    "storeCount": 3,
+    "spotlight": "7 live coupons across 3 stores."
+  },
+  {
+    "id": "EE",
+    "name": "Estonia",
+    "code": "EE",
+    "country": "Estonia",
+    "couponCount": 5,
+    "storeCount": 2,
+    "spotlight": "5 live coupons across 2 stores."
+  },
+  {
+    "id": "KE",
+    "name": "Kenya",
+    "code": "KE",
+    "country": "Kenya",
+    "couponCount": 5,
+    "storeCount": 2,
+    "spotlight": "5 live coupons across 2 stores."
+  },
+  {
+    "id": "BH",
+    "name": "Bahrain",
+    "code": "BH",
+    "country": "Bahrain",
+    "couponCount": 4,
+    "storeCount": 1,
+    "spotlight": "4 live coupons across 1 stores."
+  },
+  {
+    "id": "KH",
+    "name": "Cambodia",
+    "code": "KH",
+    "country": "Cambodia",
+    "couponCount": 4,
+    "storeCount": 2,
+    "spotlight": "4 live coupons across 2 stores."
+  },
+  {
+    "id": "GH",
+    "name": "Ghana",
+    "code": "GH",
+    "country": "Ghana",
+    "couponCount": 4,
+    "storeCount": 1,
+    "spotlight": "4 live coupons across 1 stores."
+  },
+  {
+    "id": "NU",
+    "name": "Niue",
+    "code": "NU",
+    "country": "Niue",
+    "couponCount": 4,
+    "storeCount": 3,
+    "spotlight": "4 live coupons across 3 stores."
+  },
+  {
+    "id": "QA",
+    "name": "Qatar",
+    "code": "QA",
+    "country": "Qatar",
+    "couponCount": 4,
+    "storeCount": 1,
+    "spotlight": "4 live coupons across 1 stores."
+  },
+  {
+    "id": "BI",
+    "name": "Burundi",
+    "code": "BI",
+    "country": "Burundi",
+    "couponCount": 3,
+    "storeCount": 1,
+    "spotlight": "3 live coupons across 1 stores."
+  },
+  {
+    "id": "MK",
+    "name": "North Macedonia",
+    "code": "MK",
+    "country": "North Macedonia",
+    "couponCount": 3,
+    "storeCount": 1,
+    "spotlight": "3 live coupons across 1 stores."
+  },
+  {
+    "id": "CL",
+    "name": "Chile",
+    "code": "CL",
+    "country": "Chile",
+    "couponCount": 2,
+    "storeCount": 2,
+    "spotlight": "2 live coupons across 2 stores."
+  },
+  {
+    "id": "GE",
+    "name": "Georgia",
+    "code": "GE",
+    "country": "Georgia",
+    "couponCount": 2,
+    "storeCount": 1,
+    "spotlight": "2 live coupons across 1 stores."
+  },
+  {
+    "id": "MT",
+    "name": "Malta",
+    "code": "MT",
+    "country": "Malta",
+    "couponCount": 2,
+    "storeCount": 1,
+    "spotlight": "2 live coupons across 1 stores."
+  },
+  {
+    "id": "NG",
+    "name": "Nigeria",
+    "code": "NG",
+    "country": "Nigeria",
+    "couponCount": 2,
+    "storeCount": 1,
+    "spotlight": "2 live coupons across 1 stores."
+  },
+  {
+    "id": "AM",
+    "name": "Armenia",
+    "code": "AM",
+    "country": "Armenia",
+    "couponCount": 1,
+    "storeCount": 1,
+    "spotlight": "1 live coupons across 1 stores."
+  },
+  {
+    "id": "BD",
+    "name": "Bangladesh",
+    "code": "BD",
+    "country": "Bangladesh",
+    "couponCount": 1,
+    "storeCount": 1,
+    "spotlight": "1 live coupons across 1 stores."
+  },
+  {
+    "id": "NP",
+    "name": "Nepal",
+    "code": "NP",
+    "country": "Nepal",
+    "couponCount": 1,
+    "storeCount": 1,
+    "spotlight": "1 live coupons across 1 stores."
+  },
+  {
+    "id": "PE",
+    "name": "Peru",
+    "code": "PE",
+    "country": "Peru",
+    "couponCount": 1,
+    "storeCount": 1,
+    "spotlight": "1 live coupons across 1 stores."
+  },
+  {
+    "id": "SU",
+    "name": "Soviet Union",
+    "code": "SU",
+    "country": "Soviet Union",
+    "couponCount": 1,
+    "storeCount": 1,
+    "spotlight": "1 live coupons across 1 stores."
+  }
+>>>>>>> 867be0aaf6163b6277728517b306af14707a34c0
 ]

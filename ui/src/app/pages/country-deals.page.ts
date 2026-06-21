@@ -142,22 +142,30 @@ export const routeMeta = createStaticRouteMeta({
 
         <div class="couponleo-card-grid couponleo-country-market-grid">
           @for (market of pagedMarketCards(); track market.id) {
-            <button
-              type="button"
-              class="couponleo-card couponleo-country-market-card"
-              [class.is-active]="market.active"
-              (click)="selectCountry(market.value)"
-            >
-              <span class="couponleo-card__badge" aria-hidden="true">
-                <app-couponleo-eon-icon [svg]="market.icon"></app-couponleo-eon-icon>
-              </span>
-              <h3>{{ market.name }}</h3>
-              <p>{{ market.spotlight }}</p>
-              <div class="couponleo-country-market-card__meta">
-                <span>{{ market.deals }}</span>
-                <span>{{ market.stores }}</span>
-              </div>
-            </button>
+            <article class="couponleo-card couponleo-country-market-card" [class.is-active]="market.active">
+              <button
+                type="button"
+                class="couponleo-country-market-card__surface"
+                (click)="selectCountry(market.value)"
+              >
+                <span class="couponleo-card__badge" aria-hidden="true">
+                  <app-couponleo-eon-icon [svg]="market.icon"></app-couponleo-eon-icon>
+                </span>
+                <h3>{{ market.name }}</h3>
+                <p>{{ market.spotlight }}</p>
+                <div class="couponleo-country-market-card__meta">
+                  <span>{{ market.deals }}</span>
+                  <span>{{ market.stores }}</span>
+                </div>
+              </button>
+              <a
+                class="couponleo-country-market-card__view-link"
+                routerLink="/top-deals"
+                [queryParams]="buildCountryQuery(market.value)"
+              >
+                {{ i18n.t('countryDeals.viewDeals') }}
+              </a>
+            </article>
           }
         </div>
 
@@ -358,9 +366,19 @@ export const routeMeta = createStaticRouteMeta({
 
     .couponleo-country-market-card {
       gap: 14px;
-      width: 100%;
       padding: 24px;
       border-radius: 22px;
+      text-align: left;
+    }
+
+    .couponleo-country-market-card__surface {
+      display: grid;
+      gap: 14px;
+      width: 100%;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
       text-align: left;
     }
 
@@ -368,6 +386,18 @@ export const routeMeta = createStaticRouteMeta({
       border-color: rgba(52, 120, 255, 0.26);
       background: linear-gradient(180deg, rgba(239, 245, 255, 0.98) 0%, rgba(255, 255, 255, 0.92) 100%);
       box-shadow: 0 20px 44px rgba(52, 120, 255, 0.12);
+    }
+
+    .couponleo-country-market-card__view-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      width: 100%;
+      border: 1px solid rgba(52, 120, 255, 0.18);
+      border-radius: 14px;
+      color: var(--couponleo-blue);
+      font-weight: 800;
     }
 
     .couponleo-country-market-card p,
@@ -500,7 +530,7 @@ export default class CountryDealsPage {
   );
 
   private readonly categoriesState = toSignal(
-    withRequestState(this.api.listCategories({ pageSize: 500 }), emptyListResponse<CouponleoCategory>()),
+    withRequestState(this.api.listCategories({ pageSize: 1000 }), emptyListResponse<CouponleoCategory>()),
     { initialValue: createLoadingState(emptyListResponse<CouponleoCategory>()) },
   );
   private readonly couponsState = toSignal(
@@ -536,6 +566,7 @@ export default class CountryDealsPage {
   );
 
   protected readonly formatCount = formatCount;
+  protected readonly buildCountryQuery = buildCountryRouteQuery;
   protected readonly marketPage = signal(1);
   protected readonly categoryPage = signal(1);
   protected readonly storePage = signal(1);
