@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import time
 from collections import Counter, defaultdict
@@ -17,10 +18,11 @@ from data.seed import DEFAULT_DATASET
 
 try:
     import pymysql
-    from pymysql.cursors import DictCursor
+    from pymysql.cursors import DictCursor, SSDictCursor
 except ImportError:  # pragma: no cover - safe fallback for environments without MySQL support
     pymysql = None
     DictCursor = None
+    SSDictCursor = None
 
 
 def _slugify(value: str) -> str:
@@ -162,7 +164,13 @@ class CouponLeoRepository:
         self._store_match_cache: Dict[tuple[str, int], Dict[str, Any]] = {}
         self._featured_coupon_cache: Optional[List[Dict[str, Any]]] = None
         self._analytics_cache: Optional[Dict[str, Any]] = None
-        self._load_data(force=True)
+        self._direct_query_enabled = os.getenv("COUPONLEO_DIRECT_QUERY_MODE", "true").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        self._direct_query_cache: Dict[tuple, tuple[float, Any]] = {}
 
     def _dataset_file_candidates(self) -> List[tuple[Path, str]]:
         candidates: List[tuple[Path, str]] = []
@@ -222,6 +230,143 @@ class CouponLeoRepository:
                 Config.MYSQL_USER,
                 Config.MYSQL_PASSWORD,
             ]
+        )
+
+    def _direct_catalog_mode(self) -> bool:
+        return self._direct_query_enabled and self._db_configured()
+
+    def _direct_cache_ttl_seconds(self) -> int:
+        return max(30, int(Config.DATA_REFRESH_SECONDS))
+
+    def _read_direct_cache(self, key: tuple) -> Any | None:
+        cached = self._direct_query_cache.get(key)
+        if cached is None:
+            return None
+
+        cached_at, payload = cached
+        if time.monotonic() - cached_at > self._direct_cache_ttl_seconds():
+            self._direct_query_cache.pop(key, None)
+            return None
+
+        return deepcopy(payload)
+
+    def _write_direct_cache(self, key: tuple, payload: Any) -> Any:
+        self._direct_query_cache[key] = (time.monotonic(), deepcopy(payload))
+        return payload
+
+    def _load_precomputed_summary(self, filename: str) -> Optional[List[Dict[str, Any]]]:
+        summary_path = Path(__file__).resolve().parent / filename
+        if not summary_path.is_file():
+            return None
+
+        try:
+            with summary_path.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (OSError, ValueError, TypeError):
+            return None
+
+        return payload if isinstance(payload, list) else None
+
+    def _filter_precomputed_store_items(
+        self,
+        items: List[Dict[str, Any]],
+        *,
+        query: str = "",
+        category: str = "",
+        location: str = "",
+        featured: Optional[bool] = None,
+        starts_with: str = "",
+    ) -> List[Dict[str, Any]]:
+        query_term = _clean_text(query).lower()
+        category_term = _clean_text(category).lower()
+        normalized_category_slug = _slugify(category_term.replace("-", " ")) if category_term else ""
+        location_term = _clean_text(location).lower()
+        starts_with_term = _clean_text(starts_with).upper()
+        filtered_items: List[Dict[str, Any]] = []
+
+        for item in items:
+            name = _clean_text(item.get("name"))
+            item_category = _clean_text(item.get("category"))
+            item_category_hint = _clean_text(item.get("category_hint"))
+            item_location = _clean_text(item.get("location"))
+            item_url = _clean_text(item.get("url"))
+            item_featured = bool(item.get("featured"))
+
+            if featured is True and not item_featured:
+                continue
+            if featured is False and item_featured:
+                continue
+
+            if query_term:
+                haystack = " ".join(
+                    [
+                        name,
+                        _clean_text(item.get("headline")),
+                        item_category,
+                        item_location,
+                        _clean_text(item.get("savings")),
+                        item_url,
+                    ]
+                ).lower()
+                if query_term not in haystack:
+                    continue
+
+            if category_term:
+                category_tokens = {
+                    item_category.lower(),
+                    item_category_hint.lower(),
+                    _slugify(item_category),
+                    _slugify(item_category_hint),
+                }
+                if normalized_category_slug not in category_tokens and category_term not in " ".join(category_tokens):
+                    continue
+
+            if location_term and location_term not in item_location.lower():
+                continue
+
+            if starts_with_term:
+                first_character = name[:1].upper()
+                if starts_with_term == "#":
+                    if first_character and re.match(r"[A-Z]", first_character):
+                        continue
+                elif first_character != starts_with_term:
+                    continue
+
+            filtered_items.append(item)
+
+        return sorted(
+            filtered_items,
+            key=lambda item: (
+                -int(item.get("activeCoupons") or item.get("couponCount") or 0),
+                -int(bool(item.get("featured"))),
+                str(item.get("name") or "").lower(),
+            ),
+        )
+
+    def _filter_precomputed_category_items(
+        self,
+        items: List[Dict[str, Any]],
+        *,
+        query: str = "",
+    ) -> List[Dict[str, Any]]:
+        query_term = _clean_text(query).lower()
+        filtered_items = (
+            [
+                item
+                for item in items
+                if query_term in f"{item.get('name', '')} {item.get('slug', '')} {item.get('headline', '')}".lower()
+            ]
+            if query_term
+            else items
+        )
+
+        return sorted(
+            filtered_items,
+            key=lambda item: (
+                -int(item.get("couponCount") or 0),
+                -int(item.get("storeCount") or 0),
+                str(item.get("name") or "").lower(),
+            ),
         )
 
     def _load_data(self, force: bool = False) -> Dict[str, List[Dict[str, Any]]]:
@@ -299,6 +444,7 @@ class CouponLeoRepository:
         self._store_match_cache = {}
         self._featured_coupon_cache = None
         self._analytics_cache = None
+        self._direct_query_cache = {}
 
     def list_items(self, collection: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         self._load_data()
@@ -620,6 +766,920 @@ class CouponLeoRepository:
     def normalize_store_host(self, value: str) -> str:
         return _normalize_host(value)
 
+    def _live_coupon_where_clauses(
+        self,
+        query: str = "",
+        category: str = "",
+        store: str = "",
+        location: str = "",
+        featured: Optional[bool] = None,
+        active: Optional[bool] = True,
+    ) -> tuple[list[str], list[Any]]:
+        clauses = ["TRIM(COALESCE(store, '')) NOT IN ('', 'unknown')"]
+        params: list[Any] = []
+
+        if active is None or active:
+            clauses.append("(end_date IS NULL OR end_date >= CURDATE())")
+        else:
+            clauses.append("end_date IS NOT NULL AND end_date < CURDATE()")
+
+        query_term = _clean_text(query).lower()
+        if query_term:
+            clauses.append(
+                "LOWER(CONCAT_WS(' ', COALESCE(title, ''), COALESCE(description, ''), COALESCE(label, ''), "
+                "COALESCE(code, ''), COALESCE(store, ''))) LIKE %s"
+            )
+            params.append(f"%{query_term}%")
+
+        category_term = _clean_text(category).lower()
+        if category_term:
+            category_like = f"%{category_term.replace('-', ' ')}%"
+            clauses.append(
+                "(LOWER(COALESCE(standard_categories, '')) LIKE %s OR LOWER(COALESCE(categories, '')) LIKE %s)"
+            )
+            params.extend([category_like, category_like])
+
+        store_term = _clean_text(store).lower()
+        if store_term:
+            clauses.append(
+                "(LOWER(COALESCE(store, '')) = %s OR LOWER(REPLACE(COALESCE(store, ''), ' ', '-')) = %s "
+                "OR LOWER(COALESCE(store, '')) LIKE %s)"
+            )
+            params.extend([store_term.replace('-', ' '), store_term, f"%{store_term.replace('-', ' ')}%"])
+
+        location_term = _clean_text(location).lower()
+        if location_term:
+            clauses.append(
+                "(LOWER(COALESCE(primary_location, '')) LIKE %s OR LOWER(COALESCE(locations, '')) LIKE %s)"
+            )
+            params.extend([f"%{location_term}%", f"%{location_term}%"])
+
+        if featured is True:
+            clauses.append("LOWER(COALESCE(featured, '')) = 'yes'")
+        elif featured is False:
+            clauses.append("LOWER(COALESCE(featured, '')) <> 'yes'")
+
+        return clauses, params
+
+    def _minimal_store_row(
+        self,
+        store_name: str,
+        raw_coupon: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return {
+            "id": _clean_text(raw_coupon.get("store_id")) or _slugify(store_name),
+            "name": store_name,
+            "primary_location": _clean_text(raw_coupon.get("primary_location")),
+            "url": _sanitize_http_url(raw_coupon.get("merchant_home_page")) or _sanitize_http_url(raw_coupon.get("url")),
+            "locations": _clean_text(raw_coupon.get("locations")),
+            "logo_horizontal_url": _clean_text(raw_coupon.get("brand_logo")),
+            "logo_square_url": _clean_text(raw_coupon.get("brand_logo")),
+            "authority_tier": 0,
+            "category_hint": _clean_text(raw_coupon.get("standard_categories")) or _clean_text(raw_coupon.get("categories")),
+            "initial_rank_score": _pick_numeric(raw_coupon.get("rating"), 45),
+        }
+
+    def list_coupons_live(
+        self,
+        *,
+        query: str = "",
+        category: str = "",
+        store: str = "",
+        location: str = "",
+        featured: Optional[bool] = None,
+        active: Optional[bool] = True,
+        page: int = 1,
+        limit: int = 48,
+    ) -> tuple[List[Dict[str, Any]], int]:
+        if not self._direct_catalog_mode():
+            items = self.search_coupons(query=query, category=category, store=store)
+            if location:
+                location_term = location.strip().lower()
+                items = [
+                    item for item in items
+                    if location_term in {
+                        str(item.get("location") or "").strip().lower(),
+                        str(item.get("primary_location") or "").strip().lower(),
+                    }
+                ]
+            if featured is not None:
+                items = [item for item in items if bool(item.get("featured")) is featured]
+            total = len(items)
+            start = max(0, (max(1, page) - 1) * max(1, limit))
+            return items[start:start + max(1, limit)], total
+
+        normalized_page = max(1, int(page or 1))
+        normalized_limit = max(1, int(limit or 48))
+        cache_key = (
+            "live-coupons",
+            _clean_text(query).lower(),
+            _clean_text(category).lower(),
+            _clean_text(store).lower(),
+            _clean_text(location).lower(),
+            featured,
+            active,
+            normalized_page,
+            normalized_limit,
+        )
+        cached = self._read_direct_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        clauses, params = self._live_coupon_where_clauses(
+            query=query,
+            category=category,
+            store=store,
+            location=location,
+            featured=featured,
+            active=active,
+        )
+        where_sql = " AND ".join(clauses)
+        offset = (normalized_page - 1) * normalized_limit
+
+        connection = self._connect_mysql()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(f"SELECT COUNT(1) AS total FROM coupons WHERE {where_sql}", params)
+                total = int((cursor.fetchone() or {}).get("total") or 0)
+
+                cursor.execute(
+                    f"""
+                    SELECT
+                        id,
+                        offer_id,
+                        title,
+                        description,
+                        label,
+                        code,
+                        featured,
+                        source,
+                        deeplink,
+                        affiliate_link,
+                        cashback_link,
+                        url,
+                        image_url,
+                        brand_logo,
+                        type,
+                        store,
+                        merchant_home_page,
+                        categories,
+                        start_date,
+                        end_date,
+                        status,
+                        primary_location,
+                        language,
+                        rating,
+                        standard_categories,
+                        locations,
+                        token,
+                        store_id
+                    FROM coupons
+                    WHERE {where_sql}
+                    ORDER BY
+                        CASE WHEN LOWER(COALESCE(featured, '')) = 'yes' THEN 1 ELSE 0 END DESC,
+                        rating DESC,
+                        id DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    [*params, normalized_limit, offset],
+                )
+                raw_coupons = cursor.fetchall()
+                store_names = sorted(
+                    {
+                        _clean_text(row.get("store"))
+                        for row in raw_coupons
+                        if _clean_text(row.get("store"))
+                    }
+                )
+                raw_store_rows = self._load_store_rows(cursor, store_names)
+                location_lookup = self._load_location_lookup(cursor)
+
+            store_rows_by_name: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+            for store_row in raw_store_rows:
+                store_rows_by_name[_lower_text(store_row.get("name"))].append(store_row)
+
+            items: List[Dict[str, Any]] = []
+            for raw_coupon in raw_coupons:
+                store_name = _clean_text(raw_coupon.get("store")) or "Unknown store"
+                store_row = self._select_store_row(store_rows_by_name.get(store_name.lower(), []))
+                effective_store_row = store_row or self._minimal_store_row(store_name, raw_coupon)
+                store_payload = self._build_store_record(store_name, effective_store_row, [raw_coupon], location_lookup)
+                coupon_payload = self._build_coupon_record(raw_coupon, store_payload, location_lookup)
+                if coupon_payload is not None:
+                    items.append(coupon_payload)
+
+            return self._write_direct_cache(cache_key, (items, total))
+        finally:
+            connection.close()
+
+    def get_coupon_live(self, identifier: str) -> Optional[Dict[str, Any]]:
+        target = _clean_text(identifier).lower()
+        if not target:
+            return None
+
+        if not self._direct_catalog_mode():
+            return self.get_item("coupons", identifier)
+
+        coupon_id = target
+        match = re.search(r"-(\d+)$", target)
+        if match:
+            coupon_id = match.group(1)
+
+        connection = self._connect_mysql()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        offer_id,
+                        title,
+                        description,
+                        label,
+                        code,
+                        featured,
+                        source,
+                        deeplink,
+                        affiliate_link,
+                        cashback_link,
+                        url,
+                        image_url,
+                        brand_logo,
+                        type,
+                        store,
+                        merchant_home_page,
+                        categories,
+                        start_date,
+                        end_date,
+                        status,
+                        primary_location,
+                        language,
+                        rating,
+                        standard_categories,
+                        locations,
+                        token,
+                        store_id
+                    FROM coupons
+                    WHERE id = %s
+                    LIMIT 1
+                    """,
+                    (coupon_id,),
+                )
+                raw_coupon = cursor.fetchone()
+                if not raw_coupon:
+                    return None
+
+                store_name = _clean_text(raw_coupon.get("store")) or "Unknown store"
+                raw_store_rows = self._load_store_rows(cursor, [store_name])
+                location_lookup = self._load_location_lookup(cursor)
+
+            store_row = self._select_store_row(raw_store_rows)
+            effective_store_row = store_row or self._minimal_store_row(store_name, raw_coupon)
+            store_payload = self._build_store_record(store_name, effective_store_row, [raw_coupon], location_lookup)
+            return self._build_coupon_record(raw_coupon, store_payload, location_lookup)
+        finally:
+            connection.close()
+
+    def _build_store_summary_record(
+        self,
+        summary_row: Dict[str, Any],
+        location_lookup: Dict[str, str],
+        *,
+        force_featured: bool = False,
+    ) -> Dict[str, Any]:
+        store_row = {
+            "id": summary_row.get("store_id") or _slugify(_clean_text(summary_row.get("canonical_name")) or _clean_text(summary_row.get("store_name"))),
+            "name": _clean_text(summary_row.get("canonical_name")) or _clean_text(summary_row.get("store_name")),
+            "primary_location": _clean_text(summary_row.get("store_primary_location")) or _clean_text(summary_row.get("coupon_primary_location")),
+            "url": _clean_text(summary_row.get("url")),
+            "logo_horizontal_url": _clean_text(summary_row.get("logo_horizontal_url")),
+            "logo_square_url": _clean_text(summary_row.get("logo_square_url")),
+            "authority_tier": summary_row.get("authority_tier"),
+            "category_hint": _clean_text(summary_row.get("category_hint")) or _clean_text(summary_row.get("coupon_categories")),
+            "initial_rank_score": summary_row.get("initial_rank_score") or 45,
+        }
+
+        record = self._build_store_directory_record(store_row, location_lookup)
+        coupon_count = int(summary_row.get("coupon_count") or 0)
+        raw_category = _clean_text(summary_row.get("category_hint")) or _clean_text(summary_row.get("coupon_categories"))
+        category_name = _title_case_words(_split_csv_values(raw_category)[0] if raw_category else "Store") or "Store"
+        location_name = record.get("location") or "Global"
+        category_copy = category_name.lower() if category_name.strip().lower() != "other" else "store"
+
+        record.update(
+            {
+                "headline": (
+                    f"{coupon_count} live {category_copy} offers for {location_name} shoppers, "
+                    "refreshed from CouponLeo's real coupon feed."
+                ),
+                "category": category_name,
+                "category_hint": _clean_text(store_row.get("category_hint")) or category_name.lower(),
+                "activeCoupons": coupon_count,
+                "couponCount": coupon_count,
+                "savings": "Live savings",
+                "featured": force_featured or int(summary_row.get("featured_count") or 0) > 0,
+                "hasLiveOffers": coupon_count > 0,
+            }
+        )
+        return record
+
+    def list_stores_live(
+        self,
+        *,
+        query: str = "",
+        category: str = "",
+        location: str = "",
+        featured: Optional[bool] = None,
+        starts_with: str = "",
+        page: int = 1,
+        limit: int = 48,
+    ) -> tuple[List[Dict[str, Any]], int]:
+        normalized_page = max(1, int(page or 1))
+        normalized_limit = max(1, int(limit or 48))
+        precomputed_stores = self._load_precomputed_summary("stores-summary.json")
+        if precomputed_stores is not None:
+            filtered_items = self._filter_precomputed_store_items(
+                precomputed_stores,
+                query=query,
+                category=category,
+                location=location,
+                featured=featured,
+                starts_with=starts_with,
+            )
+            total = len(filtered_items)
+            start = (normalized_page - 1) * normalized_limit
+            return deepcopy(filtered_items[start:start + normalized_limit]), total
+
+        if not self._direct_catalog_mode():
+            items = self.search_stores(query=query, category=category, location=location)
+            if featured is True:
+                items = [item for item in items if bool(item.get("featured"))][: max(1, int(limit or 48))]
+            total = len(items)
+            start = max(0, (max(1, page) - 1) * max(1, limit))
+            return items[start:start + max(1, limit)], total
+
+        cache_key = (
+            "live-stores",
+            _clean_text(query).lower(),
+            _clean_text(category).lower(),
+            _clean_text(location).lower(),
+            featured,
+            _clean_text(starts_with).upper(),
+            normalized_page,
+            normalized_limit,
+        )
+        cached = self._read_direct_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        precomputed_featured = self._load_precomputed_summary("featured-stores.json")
+        if featured is True and precomputed_featured:
+            start = (normalized_page - 1) * normalized_limit
+            items = deepcopy(precomputed_featured[start:start + normalized_limit])
+            return self._write_direct_cache(cache_key, (items, len(precomputed_featured)))
+
+        if featured is True and not any((_clean_text(query), _clean_text(category), _clean_text(location))):
+            connection = self._connect_mysql()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT
+                            store AS store_name,
+                            COUNT(1) AS coupon_count,
+                            MAX(COALESCE(rating, 0)) AS max_rating,
+                            MAX(primary_location) AS coupon_primary_location,
+                            MAX(locations) AS coupon_locations,
+                            MAX(COALESCE(standard_categories, categories, '')) AS coupon_categories
+                        FROM coupons
+                        WHERE TRIM(COALESCE(store, '')) NOT IN ('', 'unknown')
+                          AND (end_date IS NULL OR end_date >= CURDATE())
+                        GROUP BY store
+                        ORDER BY COUNT(1) DESC, MAX(COALESCE(rating, 0)) DESC, store ASC
+                        LIMIT %s OFFSET %s
+                        """,
+                        (normalized_limit, offset),
+                    )
+                    rows = cursor.fetchall()
+                    store_names = [
+                        _clean_text(row.get("store_name"))
+                        for row in rows
+                        if _clean_text(row.get("store_name"))
+                    ]
+                    raw_store_rows = self._load_store_rows(cursor, store_names)
+                    location_lookup = self._load_location_lookup(cursor)
+
+                store_rows_by_name: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+                for store_row in raw_store_rows:
+                    store_rows_by_name[_lower_text(store_row.get("name"))].append(store_row)
+
+                items: List[Dict[str, Any]] = []
+                for row in rows:
+                    store_name = _clean_text(row.get("store_name"))
+                    store_row = self._select_store_row(store_rows_by_name.get(store_name.lower(), []))
+                    row_payload = {
+                        **row,
+                        "canonical_name": store_name,
+                        "store_id": store_row.get("id") if store_row else _slugify(store_name),
+                        "store_primary_location": store_row.get("primary_location") if store_row else "",
+                        "url": store_row.get("url") if store_row else "",
+                        "logo_horizontal_url": store_row.get("logo_horizontal_url") if store_row else "",
+                        "logo_square_url": store_row.get("logo_square_url") if store_row else "",
+                        "authority_tier": store_row.get("authority_tier") if store_row else 0,
+                        "category_hint": store_row.get("category_hint") if store_row else "",
+                        "initial_rank_score": store_row.get("initial_rank_score") if store_row else 45,
+                        "featured_count": 1,
+                    }
+                    items.append(self._build_store_summary_record(row_payload, location_lookup, force_featured=True))
+
+                return self._write_direct_cache(cache_key, (items, offset + len(items)))
+            finally:
+                connection.close()
+
+        clauses = ["TRIM(COALESCE(c.store, '')) NOT IN ('', 'unknown')", "(c.end_date IS NULL OR c.end_date >= CURDATE())"]
+        params: list[Any] = []
+
+        query_term = _clean_text(query).lower()
+        if query_term:
+            clauses.append("(LOWER(c.store) LIKE %s OR LOWER(COALESCE(s.url, '')) LIKE %s)")
+            params.extend([f"%{query_term}%", f"%{query_term}%"])
+
+        category_term = _clean_text(category).lower()
+        if category_term:
+            category_like = f"%{category_term.replace('-', ' ')}%"
+            clauses.append(
+                "(LOWER(COALESCE(c.standard_categories, '')) LIKE %s OR LOWER(COALESCE(c.categories, '')) LIKE %s "
+                "OR LOWER(COALESCE(s.category_hint, '')) LIKE %s)"
+            )
+            params.extend([category_like, category_like, category_like])
+
+        location_term = _clean_text(location).lower()
+        if location_term:
+            clauses.append(
+                "(LOWER(COALESCE(c.primary_location, '')) LIKE %s OR LOWER(COALESCE(c.locations, '')) LIKE %s "
+                "OR LOWER(COALESCE(s.primary_location, '')) LIKE %s)"
+            )
+            params.extend([f"%{location_term}%", f"%{location_term}%", f"%{location_term}%"])
+
+        if featured is True:
+            clauses.append("(LOWER(COALESCE(c.featured, '')) = 'yes' OR COALESCE(s.initial_rank_score, 0) >= 70)")
+
+        where_sql = " AND ".join(clauses)
+        offset = (normalized_page - 1) * normalized_limit
+        should_count_total = featured is not True
+
+        connection = self._connect_mysql()
+        try:
+            with connection.cursor() as cursor:
+                total = 0
+                if should_count_total:
+                    cursor.execute(
+                        f"""
+                        SELECT COUNT(1) AS total
+                        FROM (
+                            SELECT c.store
+                            FROM coupons c
+                            LEFT JOIN stores s ON s.name = c.store
+                            WHERE {where_sql}
+                            GROUP BY c.store
+                        ) grouped
+                        """,
+                        params,
+                    )
+                    total = int((cursor.fetchone() or {}).get("total") or 0)
+
+                cursor.execute(
+                    f"""
+                    SELECT
+                        c.store AS store_name,
+                        COALESCE(s.name, c.store) AS canonical_name,
+                        s.id AS store_id,
+                        s.primary_location AS store_primary_location,
+                        MAX(c.primary_location) AS coupon_primary_location,
+                        MAX(c.locations) AS coupon_locations,
+                        MAX(COALESCE(c.standard_categories, c.categories, '')) AS coupon_categories,
+                        s.url,
+                        s.logo_horizontal_url,
+                        s.logo_square_url,
+                        s.authority_tier,
+                        s.category_hint,
+                        s.initial_rank_score,
+                        COUNT(1) AS coupon_count,
+                        MAX(COALESCE(c.rating, 0)) AS max_rating,
+                        SUM(CASE WHEN LOWER(COALESCE(c.featured, '')) = 'yes' THEN 1 ELSE 0 END) AS featured_count
+                    FROM coupons c
+                    LEFT JOIN stores s ON s.name = c.store
+                    WHERE {where_sql}
+                    GROUP BY
+                        c.store,
+                        s.id,
+                        s.name,
+                        s.primary_location,
+                        s.url,
+                        s.logo_horizontal_url,
+                        s.logo_square_url,
+                        s.authority_tier,
+                        s.category_hint,
+                        s.initial_rank_score
+                    ORDER BY
+                        COUNT(1) DESC,
+                        MAX(COALESCE(s.initial_rank_score, 0)) DESC,
+                        MAX(COALESCE(c.rating, 0)) DESC,
+                        c.store ASC
+                    LIMIT %s OFFSET %s
+                    """,
+                    [*params, normalized_limit, offset],
+                )
+                rows = cursor.fetchall()
+                location_lookup = self._load_location_lookup(cursor)
+
+            items = [
+                self._build_store_summary_record(row, location_lookup, force_featured=featured is True)
+                for row in rows
+            ]
+            if not should_count_total:
+                total = offset + len(items)
+            return self._write_direct_cache(cache_key, (items, total))
+        finally:
+            connection.close()
+
+    def _store_row_by_identifier(self, identifier: str) -> Optional[Dict[str, Any]]:
+        target = _clean_text(identifier).lower()
+        if not target:
+            return None
+
+        connection = self._connect_mysql()
+        try:
+            with connection.cursor() as cursor:
+                if target.isdigit():
+                    cursor.execute(
+                        """
+                        SELECT
+                            id,
+                            name,
+                            primary_location,
+                            important_location,
+                            url,
+                            added_on,
+                            locations,
+                            logo_horizontal_url,
+                            logo_square_url,
+                            authority_tier,
+                            category_hint,
+                            initial_rank_score,
+                            ranking_source,
+                            rank_seeded_at
+                        FROM stores
+                        WHERE id = %s
+                        LIMIT 1
+                        """,
+                        (int(target),),
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        return row
+
+                first_token = target.split("-", 1)[0]
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        name,
+                        primary_location,
+                        important_location,
+                        url,
+                        added_on,
+                        locations,
+                        logo_horizontal_url,
+                        logo_square_url,
+                        authority_tier,
+                        category_hint,
+                        initial_rank_score,
+                        ranking_source,
+                        rank_seeded_at
+                    FROM stores
+                    WHERE LOWER(name) LIKE %s OR LOWER(COALESCE(url, '')) LIKE %s
+                    LIMIT 250
+                    """,
+                    (f"%{first_token}%", f"%{target}%"),
+                )
+                candidates = cursor.fetchall()
+        finally:
+            connection.close()
+
+        for candidate in candidates:
+            candidate_slug = _slugify(_clean_text(candidate.get("name")))
+            if target in {
+                candidate_slug,
+                _clean_text(candidate.get("id")).lower(),
+                _normalize_host(candidate.get("url")),
+            }:
+                return candidate
+
+        return candidates[0] if candidates else None
+
+    def get_store_live(self, identifier: str) -> Optional[Dict[str, Any]]:
+        if not self._direct_catalog_mode():
+            return self.get_item("stores", identifier)
+
+        cache_key = ("live-store", _clean_text(identifier).lower())
+        cached = self._read_direct_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        store_row = self._store_row_by_identifier(identifier)
+        if not store_row:
+            return None
+
+        store_name = _clean_text(store_row.get("name"))
+        coupon_count, raw_coupons, location_lookup = self._lookup_active_coupons_for_store(store_name, 48)
+
+        if raw_coupons:
+            store_payload = self._build_store_record(store_name, store_row, raw_coupons, location_lookup)
+            store_payload["activeCoupons"] = coupon_count
+            store_payload["couponCount"] = coupon_count
+            store_payload["hasLiveOffers"] = coupon_count > 0
+        else:
+            store_payload = self._build_store_directory_record(store_row, location_lookup)
+
+        return self._write_direct_cache(cache_key, store_payload)
+
+    def _aggregate_category_rows(self, query: str = "", location: str = "") -> List[Dict[str, Any]]:
+        cache_key = ("live-category-rows", _clean_text(query).lower(), _clean_text(location).lower())
+        cached = self._read_direct_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        if not self._direct_catalog_mode():
+            items = self.search_categories(query=query)
+            return self._write_direct_cache(cache_key, items)
+
+        clauses = ["TRIM(COALESCE(store, '')) NOT IN ('', 'unknown')", "(end_date IS NULL OR end_date >= CURDATE())"]
+        params: list[Any] = []
+
+        location_term = _clean_text(location).lower()
+        if location_term:
+            clauses.append("(LOWER(COALESCE(primary_location, '')) LIKE %s OR LOWER(COALESCE(locations, '')) LIKE %s)")
+            params.extend([f"%{location_term}%", f"%{location_term}%"])
+
+        where_sql = " AND ".join(clauses)
+        categories_index: Dict[str, Dict[str, Any]] = {}
+        connection = self._connect_mysql()
+        try:
+            cursor_factory = SSDictCursor if SSDictCursor is not None else DictCursor
+            with connection.cursor(cursor_factory) as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT standard_categories, categories, store
+                    FROM coupons
+                    WHERE {where_sql}
+                    """,
+                    params,
+                )
+                for row in cursor:
+                    store_name = _clean_text(row.get("store"))
+                    for category_name in self._extract_category_names(row):
+                        slug = _slugify(category_name)
+                        entry = categories_index.setdefault(
+                            slug,
+                            {
+                                "id": slug,
+                                "name": category_name,
+                                "slug": slug,
+                                "couponCount": 0,
+                                "storeNames": set(),
+                            },
+                        )
+                        entry["couponCount"] += 1
+                        if store_name:
+                            entry["storeNames"].add(store_name)
+        finally:
+            connection.close()
+
+        items = self._finalize_categories(categories_index)
+        query_term = _clean_text(query).lower()
+        if query_term:
+            items = [
+                item
+                for item in items
+                if query_term in f"{item.get('name', '')} {item.get('slug', '')} {item.get('headline', '')}".lower()
+            ]
+        return self._write_direct_cache(cache_key, items)
+
+    def list_categories_live(
+        self,
+        *,
+        query: str = "",
+        location: str = "",
+        page: int = 1,
+        limit: int = 48,
+    ) -> tuple[List[Dict[str, Any]], int]:
+        if not _clean_text(location):
+            precomputed_categories = self._load_precomputed_summary("categories-summary.json")
+            if precomputed_categories is not None:
+                filtered_items = self._filter_precomputed_category_items(precomputed_categories, query=query)
+                total = len(filtered_items)
+                normalized_page = max(1, int(page or 1))
+                normalized_limit = max(1, int(limit or 48))
+                start = (normalized_page - 1) * normalized_limit
+                return deepcopy(filtered_items[start:start + normalized_limit]), total
+
+        items = self._aggregate_category_rows(query=query, location=location)
+        total = len(items)
+        normalized_page = max(1, int(page or 1))
+        normalized_limit = max(1, int(limit or 48))
+        start = (normalized_page - 1) * normalized_limit
+        return deepcopy(items[start:start + normalized_limit]), total
+
+    def get_category_live(self, identifier: str) -> Optional[Dict[str, Any]]:
+        target = _clean_text(identifier).lower()
+        precomputed_categories = self._load_precomputed_summary("categories-summary.json")
+        if precomputed_categories is not None:
+            for item in precomputed_categories:
+                if target in {
+                    _clean_text(item.get("id")).lower(),
+                    _clean_text(item.get("slug")).lower(),
+                    _clean_text(item.get("name")).lower(),
+                }:
+                    return deepcopy(item)
+
+        for item in self._aggregate_category_rows():
+            if target in {
+                _clean_text(item.get("id")).lower(),
+                _clean_text(item.get("slug")).lower(),
+                _clean_text(item.get("name")).lower(),
+            }:
+                return deepcopy(item)
+        return None
+
+    def _aggregate_location_rows(self, query: str = "") -> List[Dict[str, Any]]:
+        cache_key = ("live-location-rows", _clean_text(query).lower())
+        cached = self._read_direct_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        if not self._direct_catalog_mode():
+            items = self.search_locations(query=query)
+            return self._write_direct_cache(cache_key, items)
+
+        locations_index: Dict[str, Dict[str, Any]] = {}
+        connection = self._connect_mysql()
+        try:
+            with connection.cursor() as cursor:
+                location_lookup = self._load_location_lookup(cursor)
+                for code, name in location_lookup.items():
+                    locations_index[code] = {
+                        "id": code,
+                        "name": name,
+                        "code": code,
+                        "couponCount": 0,
+                        "storeNames": set(),
+                    }
+
+                cursor_factory = SSDictCursor if SSDictCursor is not None else DictCursor
+            with connection.cursor(cursor_factory) as stream_cursor:
+                stream_cursor.execute(
+                    """
+                    SELECT primary_location, locations, store
+                    FROM coupons
+                    WHERE TRIM(COALESCE(store, '')) NOT IN ('', 'unknown')
+                      AND (end_date IS NULL OR end_date >= CURDATE())
+                    """
+                )
+                for row in stream_cursor:
+                    store_name = _clean_text(row.get("store"))
+                    for code, name in self._extract_location_tokens(row, None, location_lookup):
+                        entry = locations_index.setdefault(
+                            code,
+                            {
+                                "id": code,
+                                "name": name,
+                                "code": code,
+                                "couponCount": 0,
+                                "storeNames": set(),
+                            },
+                        )
+                        entry["couponCount"] += 1
+                        if store_name:
+                            entry["storeNames"].add(store_name)
+        finally:
+            connection.close()
+
+        items = self._finalize_locations(locations_index)
+        query_term = _clean_text(query).lower()
+        if query_term:
+            items = [
+                item
+                for item in items
+                if query_term in f"{item.get('name', '')} {item.get('code', '')} {item.get('spotlight', '')}".lower()
+            ]
+        return self._write_direct_cache(cache_key, items)
+
+    def list_locations_live(
+        self,
+        *,
+        query: str = "",
+        page: int = 1,
+        limit: int = 48,
+    ) -> tuple[List[Dict[str, Any]], int]:
+        precomputed_locations = self._load_precomputed_summary("locations-summary.json")
+        if precomputed_locations is not None:
+            query_term = _clean_text(query).lower()
+            filtered_items = (
+                [
+                    item
+                    for item in precomputed_locations
+                    if query_term in f"{item.get('name', '')} {item.get('code', '')} {item.get('spotlight', '')}".lower()
+                ]
+                if query_term
+                else precomputed_locations
+            )
+            total = len(filtered_items)
+            normalized_page = max(1, int(page or 1))
+            normalized_limit = max(1, int(limit or 48))
+            start = (normalized_page - 1) * normalized_limit
+            return deepcopy(filtered_items[start:start + normalized_limit]), total
+
+        items = self._aggregate_location_rows(query=query)
+        total = len(items)
+        normalized_page = max(1, int(page or 1))
+        normalized_limit = max(1, int(limit or 48))
+        start = (normalized_page - 1) * normalized_limit
+        return deepcopy(items[start:start + normalized_limit]), total
+
+    def get_location_live(self, identifier: str) -> Optional[Dict[str, Any]]:
+        target = _clean_text(identifier).lower()
+        for item in self._aggregate_location_rows():
+            if target in {
+                _clean_text(item.get("id")).lower(),
+                _clean_text(item.get("code")).lower(),
+                _clean_text(item.get("name")).lower(),
+            }:
+                return deepcopy(item)
+        return None
+
+    def store_analytics_live(self) -> Dict[str, int]:
+        if not self._direct_catalog_mode():
+            return self.store_analytics()
+
+        cache_key = ("live-store-analytics",)
+        cached = self._read_direct_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        connection = self._connect_mysql()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT COUNT(1) AS total
+                    FROM coupons
+                    WHERE TRIM(COALESCE(store, '')) NOT IN ('', 'unknown')
+                      AND (end_date IS NULL OR end_date >= CURDATE())
+                    """
+                )
+                total_coupons = int((cursor.fetchone() or {}).get("total") or 0)
+
+                cursor.execute(
+                    """
+                    SELECT COUNT(1) AS total
+                    FROM (
+                        SELECT store
+                        FROM coupons
+                        WHERE TRIM(COALESCE(store, '')) NOT IN ('', 'unknown')
+                          AND (end_date IS NULL OR end_date >= CURDATE())
+                        GROUP BY store
+                    ) grouped
+                    """
+                )
+                total_stores = int((cursor.fetchone() or {}).get("total") or 0)
+
+                cursor.execute(
+                    """
+                    SELECT COUNT(1) AS total
+                    FROM coupons
+                    WHERE TRIM(COALESCE(store, '')) NOT IN ('', 'unknown')
+                      AND (end_date IS NULL OR end_date >= CURDATE())
+                      AND LOWER(COALESCE(featured, '')) = 'yes'
+                    """
+                )
+                featured_coupons = int((cursor.fetchone() or {}).get("total") or 0)
+
+                cursor.execute("SELECT COUNT(1) AS total FROM locations")
+                live_markets = int((cursor.fetchone() or {}).get("total") or 0)
+        finally:
+            connection.close()
+
+        payload = {
+            "totalCoupons": total_coupons,
+            "totalStores": total_stores,
+            "featuredCoupons": featured_coupons,
+            "liveMarkets": live_markets,
+            "dataSource": "mysql-direct",
+            "refreshedAt": datetime.utcnow().isoformat(),
+        }
+        return self._write_direct_cache(cache_key, payload)
+
     def _match_loaded_store(self, target_host: str) -> Optional[Dict[str, Any]]:
         best_match: Optional[Dict[str, Any]] = None
         best_rank: Optional[tuple] = None
@@ -728,6 +1788,47 @@ class CouponLeoRepository:
         cached_payload = self._store_match_cache.get(cache_key)
         if cached_payload is not None:
             return deepcopy(cached_payload)
+
+        if self._direct_catalog_mode():
+            store_rows = self._lookup_store_rows_by_host(target_host)
+            store_row = self._select_store_row(store_rows)
+
+            if not store_row:
+                payload = self._build_store_match_payload(target_host, None, [], normalized_limit)
+                self._store_match_cache[cache_key] = deepcopy(payload)
+                return payload
+
+            coupon_count, raw_coupons, location_lookup = self._lookup_active_coupons_for_store(
+                _clean_text(store_row.get("name")),
+                normalized_limit,
+            )
+
+            if raw_coupons:
+                store = self._build_store_record(_clean_text(store_row.get("name")), store_row, raw_coupons, location_lookup)
+                store["activeCoupons"] = coupon_count
+                store["couponCount"] = coupon_count
+                store["hasLiveOffers"] = coupon_count > 0
+            else:
+                store = self._build_store_directory_record(store_row, location_lookup)
+
+            coupons = [
+                coupon
+                for coupon in (
+                    self._build_coupon_record(raw_coupon, store, location_lookup)
+                    for raw_coupon in raw_coupons
+                )
+                if coupon is not None
+            ]
+
+            payload = {
+                "matched": True,
+                "matchedDomain": target_host,
+                "store": store,
+                "couponCount": coupon_count,
+                "coupons": coupons[:normalized_limit],
+            }
+            self._store_match_cache[cache_key] = deepcopy(payload)
+            return payload
 
         self._load_data()
         loaded_store = self._match_loaded_store(target_host)
@@ -1371,7 +2472,6 @@ class CouponLeoRepository:
             _normalize_host(store_url),
             _normalize_host(store_name),
             _normalize_host(primary_coupon.get("merchant_home_page")),
-            _normalize_host(primary_coupon.get("url")),
         }
         domains = {domain for domain in domains if domain}
 
