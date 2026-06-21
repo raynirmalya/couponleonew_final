@@ -1,0 +1,43 @@
+[
+  {
+    "name": "Slickdeals",
+    "home_url": "https://slickdeals.net/",
+    "topic": "Deals",
+    "market_scope": "United States of America",
+    "allow_path_hints": ["/magazine/", "/article/", "/deal/"],
+    "enabled": true
+  },
+  {
+    "name": "DealNews",
+    "home_url": "https://www.dealnews.com/",
+    "topic": "Deals",
+    "market_scope": "Global",
+    "allow_path_hints": ["/features/"],
+    "enabled": true
+  },
+  {
+    "name": "CouponFollow",
+    "home_url": "https://couponfollow.com/",
+    "topic": "Coupons",
+    "market_scope": "Global",
+    "allow_path_hints": ["/research/"],
+    "deny_path_hints": ["/support/"],
+    "enabled": true
+  },
+  {
+    "name": "CouponCabin",
+    "home_url": "https://www.couponcabin.com/",
+    "topic": "Coupons",
+    "market_scope": "United States of America",
+    "allow_path_hints": ["/blog/", "/savings-guides/"],
+    "enabled": true
+  },
+  {
+    "name": "DontPayFull",
+    "home_url": "https://www.dontpayfull.com/",
+    "topic": "Savings",
+    "market_scope": "Global",
+    "allow_path_hints": ["/blog/", "/news/"],
+    "enabled": true
+  }
+]

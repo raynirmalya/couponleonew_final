@@ -1,0 +1,42 @@
+CREATE TABLE IF NOT EXISTS auth_accounts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    account_uid CHAR(32) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    full_name VARCHAR(120) NOT NULL DEFAULT '',
+    provider VARCHAR(24) NOT NULL DEFAULT 'email',
+    status VARCHAR(32) NOT NULL DEFAULT 'pending_activation',
+    password_hash VARCHAR(255) NOT NULL DEFAULT '',
+    activation_token_hash CHAR(64) NOT NULL DEFAULT '',
+    activation_requested_at DATETIME(6) NULL,
+    activation_expires_at DATETIME(6) NULL,
+    reset_token_hash CHAR(64) NOT NULL DEFAULT '',
+    reset_requested_at DATETIME(6) NULL,
+    reset_expires_at DATETIME(6) NULL,
+    activated_at DATETIME(6) NULL,
+    last_sign_in_at DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_auth_accounts_uid (account_uid),
+    UNIQUE KEY uq_auth_accounts_email (email),
+    KEY idx_auth_accounts_status (status),
+    KEY idx_auth_accounts_provider_status (provider, status),
+    KEY idx_auth_accounts_updated_at (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS auth_outbox_messages (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    message_uid CHAR(32) NOT NULL,
+    kind VARCHAR(32) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    subject VARCHAR(255) NOT NULL DEFAULT '',
+    text_body MEDIUMTEXT NULL,
+    html_body MEDIUMTEXT NULL,
+    action_url VARCHAR(2048) NOT NULL DEFAULT '',
+    delivery_mode VARCHAR(24) NOT NULL DEFAULT 'preview',
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_auth_outbox_messages_uid (message_uid),
+    KEY idx_auth_outbox_messages_email_created (email, created_at),
+    KEY idx_auth_outbox_messages_kind_created (kind, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

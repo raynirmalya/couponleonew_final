@@ -1,0 +1,21 @@
+{
+  "name": "CouponLeo",
+  "short_name": "CouponLeo",
+  "description": "Live coupons, verified deals, stores, and categories from the CouponLeo catalog.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fffaf5",
+  "theme_color": "#2355f6",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

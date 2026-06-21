@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CouponLeo Companion</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="popup-header">
+        <div class="popup-header-top">
+          <div class="brand-lockup">
+            <img src="assets/couponleo-mark.svg" alt="CouponLeo" class="brand-mark">
+            <div>
+              <p class="eyebrow">CouponLeo Companion</p>
+              <h1>Live offers, saved stores, and extension login</h1>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button
+              type="button"
+              class="header-icon-button"
+              data-refresh-popup
+              aria-label="Refresh CouponLeo popup"
+              title="Refresh"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 12a8 8 0 1 1-2.34-5.66"></path>
+                <path d="M20 4v6h-6"></path>
+              </svg>
+            </button>
+            <div class="header-menu-shell">
+              <button
+                type="button"
+                class="header-icon-button"
+                data-menu-trigger
+                aria-label="Open CouponLeo popup menu"
+                title="More"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="5" r="1.5"></circle>
+                  <circle cx="12" cy="12" r="1.5"></circle>
+                  <circle cx="12" cy="19" r="1.5"></circle>
+                </svg>
+              </button>
+              <div id="header-menu" class="header-menu" aria-hidden="true"></div>
+            </div>
+          </div>
+        </div>
+        <a class="hero-link" href="https://couponleo.com" target="_blank" rel="noreferrer" data-site-home-link>
+          <span class="hero-link-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M14 5h5v5"></path>
+              <path d="M10 14 19 5"></path>
+              <path d="M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4"></path>
+            </svg>
+          </span>
+          <span>Open CouponLeo</span>
+        </a>
+      </header>
+
+      <section id="status-card" class="status-strip status-strip-loading"></section>
+      <section id="hero-content" class="content-stack"></section>
+      <section id="account-card" class="account-card"></section>
+      <section id="offer-content" class="content-stack"></section>
+      <footer id="footer-card" class="footer-card"></footer>
+    </main>
+
+    <script src="shared.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

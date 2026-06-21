@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="CouponLeo coupon ticket favicon">
+  <defs>
+    <linearGradient id="couponleoTicketBg" x1="6" y1="7" x2="58" y2="57" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f2b34d" />
+      <stop offset="0.52" stop-color="#eb9d39" />
+      <stop offset="1" stop-color="#df8528" />
+    </linearGradient>
+    <mask id="couponleoTicketCutouts">
+      <rect width="64" height="64" fill="#000" />
+      <rect x="2" y="5" width="60" height="54" rx="14" fill="#fff" />
+      <circle cx="2" cy="32" r="6.75" fill="#000" />
+      <circle cx="62" cy="32" r="6.75" fill="#000" />
+      <rect x="17" y="10" width="2.8" height="5.2" rx="1.4" fill="#000" />
+      <rect x="17" y="19" width="2.8" height="5.2" rx="1.4" fill="#000" />
+      <rect x="17" y="28" width="2.8" height="5.2" rx="1.4" fill="#000" />
+      <rect x="17" y="37" width="2.8" height="5.2" rx="1.4" fill="#000" />
+      <rect x="17" y="46" width="2.8" height="5.2" rx="1.4" fill="#000" />
+      <path
+        d="M44 18.5A13.5 13.5 0 1 0 44 45.5"
+        fill="none"
+        stroke="#000"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="8.4"
+      />
+    </mask>
+  </defs>
+  <g mask="url(#couponleoTicketCutouts)">
+    <rect x="2" y="5" width="60" height="54" rx="14" fill="url(#couponleoTicketBg)" />
+  </g>
+</svg>
