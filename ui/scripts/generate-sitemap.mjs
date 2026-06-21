@@ -1,16 +1,19 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const uiRoot = resolve(scriptDirectory, '..');
 const dataDirectory = resolve(uiRoot, '..', 'api', 'dataservices', 'data');
-const outputPath = resolve(uiRoot, 'public', 'sitemap.xml');
+const publicDirectory = resolve(uiRoot, 'public');
+const sitemapIndexPath = resolve(publicDirectory, 'sitemap.xml');
+const sitemapDirectory = resolve(publicDirectory, 'sitemaps');
 
 const BASE_URL = 'https://couponleo.com';
 const BUILD_DATE = new Date().toISOString().slice(0, 10);
 const CATEGORY_MIN_COUPON_COUNT = 25;
 const CATEGORY_MIN_STORE_COUNT = 5;
+const STORE_SITEMAP_CHUNK_SIZE = 5000;
 const EXCLUDED_CATEGORY_SLUGS = new Set([
   'coupons',
   'deals',
@@ -106,10 +109,10 @@ function shouldIncludeLocation(location) {
   return Boolean(String(location?.name ?? '').trim()) && Number(location?.couponCount ?? 0) > 0;
 }
 
-function buildXml(entries) {
+function buildUrlSetXml(entries) {
   const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'];
 
-  for (const entry of entries.values()) {
+  for (const entry of entries) {
     lines.push('  <url>');
     lines.push(`    <loc>${escapeXml(entry.loc)}</loc>`);
     lines.push(`    <lastmod>${entry.lastmod}</lastmod>`);
@@ -122,7 +125,23 @@ function buildXml(entries) {
   return lines.join('\n');
 }
 
+function buildSitemapIndexXml(sitemaps) {
+  const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'];
+
+  for (const sitemap of sitemaps) {
+    lines.push('  <sitemap>');
+    lines.push(`    <loc>${escapeXml(sitemap.loc)}</loc>`);
+    lines.push(`    <lastmod>${sitemap.lastmod}</lastmod>`);
+    lines.push('  </sitemap>');
+  }
+
+  lines.push('</sitemapindex>', '');
+  return lines.join('\n');
+}
+
 function writeIfChanged(filePath, content) {
+  mkdirSync(dirname(filePath), { recursive: true });
+
   if (existsSync(filePath) && readFileSync(filePath, 'utf8') === content) {
     return false;
   }
@@ -131,10 +150,39 @@ function writeIfChanged(filePath, content) {
   return true;
 }
 
+function chunkEntries(entries, chunkSize) {
+  const chunks = [];
+
+  for (let index = 0; index < entries.length; index += chunkSize) {
+    chunks.push(entries.slice(index, index + chunkSize));
+  }
+
+  return chunks;
+}
+
+function cleanupStaleSitemaps(expectedFilenames) {
+  if (!existsSync(sitemapDirectory)) {
+    return;
+  }
+
+  for (const entry of readdirSync(sitemapDirectory, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith('.xml')) {
+      continue;
+    }
+
+    if (!expectedFilenames.has(entry.name)) {
+      rmSync(resolve(sitemapDirectory, entry.name));
+    }
+  }
+}
+
 const stores = readJson('stores-summary.json');
 const categories = readJson('categories-summary.json');
 const locations = readJson('locations-summary.json');
-const entries = new Map();
+const staticEntries = new Map();
+const countryEntries = new Map();
+const categoryEntries = new Map();
+const storeEntries = new Map();
 
 let staticCount = 0;
 let storeCount = 0;
@@ -142,7 +190,7 @@ let categoryCount = 0;
 let locationCount = 0;
 
 for (const route of STATIC_ROUTES) {
-  if (addEntry(entries, route.pathname, route)) {
+  if (addEntry(staticEntries, route.pathname, route)) {
     staticCount += 1;
   }
 }
@@ -152,7 +200,7 @@ for (const location of locations) {
     continue;
   }
 
-  if (addEntry(entries, '/country-deals', {
+  if (addEntry(countryEntries, '/country-deals', {
     query: { country: String(location.name).trim() },
     changefreq: 'daily',
     priority: '0.80',
@@ -166,7 +214,7 @@ for (const category of categories) {
     continue;
   }
 
-  if (addEntry(entries, `/categories/${encodeURIComponent(cleanSlug(category.slug))}`, {
+  if (addEntry(categoryEntries, `/categories/${encodeURIComponent(cleanSlug(category.slug))}`, {
     changefreq: 'daily',
     priority: '0.78',
   })) {
@@ -179,7 +227,7 @@ for (const store of stores) {
     continue;
   }
 
-  if (addEntry(entries, `/stores/${encodeURIComponent(cleanSlug(store.slug))}`, {
+  if (addEntry(storeEntries, `/stores/${encodeURIComponent(cleanSlug(store.slug))}`, {
     changefreq: 'daily',
     priority: '0.64',
   })) {
@@ -187,16 +235,52 @@ for (const store of stores) {
   }
 }
 
-const xml = buildXml(entries);
-const changed = writeIfChanged(outputPath, xml);
+const sitemapFiles = [
+  { filename: 'static.xml', entries: [...staticEntries.values()] },
+  { filename: 'countries.xml', entries: [...countryEntries.values()] },
+  { filename: 'categories.xml', entries: [...categoryEntries.values()] },
+];
+const storeEntryChunks = chunkEntries([...storeEntries.values()], STORE_SITEMAP_CHUNK_SIZE);
+
+for (const [index, entries] of storeEntryChunks.entries()) {
+  sitemapFiles.push({
+    filename: storeEntryChunks.length === 1 ? 'stores.xml' : `stores-${index + 1}.xml`,
+    entries,
+  });
+}
+
+const expectedFilenames = new Set(sitemapFiles.map((file) => file.filename));
+let updatedSectionCount = 0;
+
+for (const sitemapFile of sitemapFiles) {
+  const content = buildUrlSetXml(sitemapFile.entries);
+  const filePath = resolve(sitemapDirectory, sitemapFile.filename);
+
+  if (writeIfChanged(filePath, content)) {
+    updatedSectionCount += 1;
+  }
+}
+
+cleanupStaleSitemaps(expectedFilenames);
+
+const sitemapIndexXml = buildSitemapIndexXml(
+  sitemapFiles.map((file) => ({
+    loc: absoluteUrl(`/sitemaps/${file.filename}`),
+    lastmod: BUILD_DATE,
+  })),
+);
+const indexChanged = writeIfChanged(sitemapIndexPath, sitemapIndexXml);
 
 console.log(
   [
-    `Sitemap ${changed ? 'updated' : 'already current'}.`,
+    `Sitemap index ${indexChanged ? 'updated' : 'already current'}.`,
+    `Sub-sitemaps updated: ${updatedSectionCount}`,
+    `Files: ${sitemapFiles.length}`,
     `Static: ${staticCount}`,
     `Countries: ${locationCount}`,
     `Categories: ${categoryCount}`,
     `Stores: ${storeCount}`,
-    `Total URLs: ${entries.size}`,
+    `Store files: ${storeEntryChunks.length}`,
+    `Total URLs: ${staticCount + locationCount + categoryCount + storeCount}`,
   ].join(' '),
 );
