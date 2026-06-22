@@ -432,60 +432,62 @@ export const termsOfUsePageConfig: CouponleoThemedPageConfig = {
 
 export const privacyPolicyPageConfig: CouponleoThemedPageConfig = {
   eyebrow: 'Privacy Policy',
-  title: 'See how CouponLeo treats account and browsing information.',
+  title: 'See how CouponLeo treats website and extension data.',
   description:
-    'Privacy Policy now lives on a real themed page so footer and sign-up links land in a consistent, trustworthy experience instead of a placeholder route.',
+    'This privacy summary covers both the CouponLeo website and the CouponLeo Companion browser extension, including sessions, saved items, current-store matching, browser storage, and telemetry.',
+  lastUpdated: 'June 23, 2026',
+  layout: 'legal',
+  heroTone: 'soft',
   actions: [
     { href: '/terms-of-use', label: 'Read Terms of Use' },
     { href: '/settings', label: 'Open settings', variant: 'ghost' },
   ],
   sections: [
     {
-      eyebrow: 'Privacy Basics',
-      title: 'What this page should cover first',
-      columns: 3,
+      eyebrow: '1. What CouponLeo uses',
+      title: 'What CouponLeo may collect',
+      variant: 'legal',
       cards: [
         {
-          title: 'Account information',
-          copy: 'Basic profile details help personalize the member dashboard and account experience.',
+          badge: 'Session',
+          title: 'Account and session information',
+          copy: 'Sign-in details and session state can be used to personalize the website, restore member context, and support sign-in handoff with the browser extension.',
           tone: 'blue',
         },
         {
-          title: 'Savings activity context',
-          copy: 'Wishlist usage, alerts, and coupon interactions can be used to improve the relevance of the product.',
+          badge: 'Storage',
+          title: 'Saved items and browser preferences',
+          copy: 'Wishlist content, saved stores, locale choices, and related browser preferences can be stored locally so users can continue their CouponLeo workflow later.',
           tone: 'orange',
         },
         {
-          title: 'User control',
-          copy: 'Settings and support routes should give members a clear path to review or adjust preferences.',
+          badge: 'Extension',
+          title: 'Current-store matching and usage context',
+          copy: 'The extension can read the current store URL or hostname to determine whether CouponLeo has matching offers, and CouponLeo can record product-usage events needed to operate and improve the service.',
           tone: 'navy',
         },
       ],
     },
     {
-      eyebrow: 'Useful Follow-ups',
-      title: 'Where to go next for more clarity',
-      columns: 2,
+      eyebrow: '2. How information is used',
+      title: 'Why CouponLeo uses this information',
+      variant: 'legal',
       cards: [
         {
-          badge: 'Settings',
-          title: 'Manage preferences inside the account area',
-          copy: 'Use the settings route when you want to tune alerts, profile context, or privacy-adjacent controls.',
-          href: '/settings',
-          cta: 'Open settings',
+          badge: 'Operations',
+          title: 'Run website and extension features',
+          copy: 'CouponLeo uses this data to power account routes, saved-item flows, current-store matching, extension popups, and relevant coupon discovery features.',
           tone: 'sand',
         },
         {
-          badge: 'Help',
-          title: 'Ask questions about policy or account behavior',
-          copy: 'The help center is the better route when a policy summary needs more practical explanation.',
-          href: '/help-center',
-          cta: 'Visit help center',
+          badge: 'Quality',
+          title: 'Improve reliability and support',
+          copy: 'CouponLeo can use service diagnostics and usage events to troubleshoot issues, measure quality, and respond to privacy or support questions. CouponLeo does not sell this user data to unrelated third parties.',
           tone: 'blue',
         },
       ],
     },
   ],
   footnote:
-    'Like the terms page, this is a clear branded summary page today and can later be expanded into a fuller policy document if needed.',
+    'This policy summary is written to cover both couponleo.com and the CouponLeo Companion browser extension in one consistent place.',
 };

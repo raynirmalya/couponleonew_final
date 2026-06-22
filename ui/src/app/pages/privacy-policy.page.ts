@@ -6,7 +6,7 @@ import { createStaticRouteMeta } from '../services/couponleo-route-meta';
 
 export const routeMeta = createStaticRouteMeta({
   title: 'Privacy Policy | CouponLeo',
-  description: 'Review CouponLeo privacy details for session state, saved items, locale preferences, and support workflows.',
+  description: 'Review how CouponLeo and the CouponLeo Companion extension handle sessions, saved items, current-store matching, browser storage, telemetry, and support workflows.',
 });
 
 @Component({
