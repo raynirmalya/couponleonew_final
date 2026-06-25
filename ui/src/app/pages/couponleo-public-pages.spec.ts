@@ -229,12 +229,15 @@ function createActivatedRouteStub(
 ) {
   const paramMap = convertToParamMap(params);
   const queryParamMap = convertToParamMap(queryParams);
+  const data = {};
 
   return {
     snapshot: {
+      data,
       paramMap,
       queryParamMap,
     },
+    data: of(data),
     paramMap: of(paramMap),
     queryParamMap: of(queryParamMap),
   };
@@ -299,20 +302,28 @@ function createApiMock(responseDelay = 5): Pick<
     listStores: (params = {}) => {
       const category = params.category?.toLowerCase().trim() ?? '';
       const location = params.location?.toLowerCase().trim() ?? '';
+      const query = params.q?.toLowerCase().trim() ?? '';
+      const startsWith = params.startsWith?.toLowerCase().trim() ?? '';
       const page = params.page ?? 1;
       const pageSize = params.pageSize ?? mockStores.length;
       const items = mockStores.filter((store) => (
         (!category || [store.category, store.slug].some((value) => value.toLowerCase() === category))
         && (!location || store.location.toLowerCase() === location)
+        && (!startsWith || store.name.toLowerCase().startsWith(startsWith))
+        && (!query || [store.name, store.headline, store.category, store.location, store.savings].some((value) => value.toLowerCase().includes(query)))
       ));
       return of(paginatedListResponse(items, page, pageSize)).pipe(delay(responseDelay));
     },
     listAllStores: (params = {}) => {
       const category = params.category?.toLowerCase().trim() ?? '';
       const location = params.location?.toLowerCase().trim() ?? '';
+      const query = params.q?.toLowerCase().trim() ?? '';
+      const startsWith = params.startsWith?.toLowerCase().trim() ?? '';
       const items = mockStores.filter((store) => (
         (!category || [store.category, store.slug].some((value) => value.toLowerCase() === category))
         && (!location || store.location.toLowerCase() === location)
+        && (!startsWith || store.name.toLowerCase().startsWith(startsWith))
+        && (!query || [store.name, store.headline, store.category, store.location, store.savings].some((value) => value.toLowerCase().includes(query)))
       ));
       return of(listResponse(items)).pipe(delay(responseDelay));
     },
@@ -356,7 +367,7 @@ async function createFixture<T>(component: Type<T>, extraProviders: object[] = [
 
 async function resolveLoader<T>(fixture: ComponentFixture<T>): Promise<void> {
   expect(fixture.nativeElement.querySelector('app-couponleo-page-loader')).not.toBeNull();
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await new Promise((resolve) => setTimeout(resolve, 250));
   await fixture.whenStable();
   fixture.detectChanges();
   expect(fixture.nativeElement.querySelector('app-couponleo-page-loader')).toBeNull();
@@ -436,10 +447,16 @@ describe('CouponLeo public pages', () => {
     expect(queryTexts(fixture, '.couponleo-store-showcase-card').join(' ')).toContain('Zeal Wear');
 
     clickButton(fixture, '.couponleo-letter-pill', 'Z');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await fixture.whenStable();
+    fixture.detectChanges();
 
     expect(queryTexts(fixture, '.couponleo-store-showcase-card')).toEqual([expect.stringContaining('Zeal Wear')]);
 
     setSearch(fixture, 'Zeal');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await fixture.whenStable();
+    fixture.detectChanges();
 
     expect(queryTexts(fixture, '.couponleo-store-showcase-card')).toEqual([expect.stringContaining('Zeal Wear')]);
     expect((fixture.nativeElement.querySelector('.couponleo-store-showcase-card a.couponleo-button') as HTMLAnchorElement | null)?.getAttribute('href'))

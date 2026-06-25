@@ -1,7 +1,8 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { map, startWith, switchMap } from 'rxjs';
+import { type PageServerLoad } from '@analogjs/router';
+import { map, of, startWith, switchMap } from 'rxjs';
 
 import { CouponleoEonIconComponent } from '../../components/couponleo-eon-icon.component';
 import { CouponleoFavoriteButtonComponent } from '../../components/couponleo-favorite-button.component';
@@ -13,9 +14,13 @@ import {
   type CouponleoCoupon,
   type CouponleoStore,
 } from '../../services/couponleo-api.service';
-import { createLoadingState, withRequestState } from '../../services/couponleo-request-state.helpers';
+import { createLoadingState, withHydratedRequestState } from '../../services/couponleo-request-state.helpers';
 import { createStaticRouteMeta } from '../../services/couponleo-route-meta';
 import { CouponleoSavedService } from '../../services/couponleo-saved.service';
+import {
+  fetchCouponleoList,
+  readCouponleoQueryParam,
+} from '../../services/couponleo-server-load.helpers';
 import {
   buildCategoryRoute,
   buildCategorySummaries,
@@ -59,6 +64,32 @@ const categoryDirectoryPageSize = 12;
 
 function emptyListResponse<T>() {
   return { items: [] as T[], total: 0 };
+}
+
+export async function load(pageServerLoad: PageServerLoad) {
+  const country = normalizeCountryRouteValue(readCouponleoQueryParam(pageServerLoad, 'country'));
+  const location = locationFilterForCountry(country);
+
+  return {
+    categories: await fetchCouponleoList(
+      pageServerLoad,
+      '/categories',
+      { pageSize: 1000 },
+      emptyListResponse<CouponleoCategory>(),
+    ),
+    coupons: await fetchCouponleoList(
+      pageServerLoad,
+      '/coupons',
+      { active: true, location, pageSize: 250 },
+      emptyListResponse<CouponleoCoupon>(),
+    ),
+    stores: await fetchCouponleoList(
+      pageServerLoad,
+      '/stores',
+      { location, pageSize: 120 },
+      emptyListResponse<CouponleoStore>(),
+    ),
+  };
 }
 
 function matchesCategoryQuery(category: CategoryDirectoryCard, query: string): boolean {
@@ -412,39 +443,43 @@ export default class CategoriesPage {
   protected readonly i18n = inject(CouponleoI18nService);
   private readonly savedService = inject(CouponleoSavedService);
   private readonly route = inject(ActivatedRoute);
+  private readonly initialLoad = this.route.snapshot.data['load'] as Awaited<ReturnType<typeof load>> | undefined;
   private readonly initialCountry = normalizeCountryRouteValue(this.route.snapshot.queryParamMap.get('country'));
   private readonly countryQueryParamMap = this.route.queryParamMap.pipe(
     map((params) => normalizeCountryRouteValue(params.get('country'))),
   );
 
   private readonly categoriesState = toSignal(
-    withRequestState(this.api.listCategories({ pageSize: 1000 }), emptyListResponse<CouponleoCategory>()),
+    withHydratedRequestState(
+      of(undefined),
+      () => this.api.listCategories({ pageSize: 1000 }),
+      emptyListResponse<CouponleoCategory>(),
+      () => this.initialLoad?.categories,
+    ),
     { initialValue: createLoadingState(emptyListResponse<CouponleoCategory>()) },
   );
   private readonly couponsState = toSignal(
-    this.countryQueryParamMap.pipe(
-      startWith(this.initialCountry),
-      switchMap((country) => withRequestState(
-        this.api.listCoupons({
-          active: true,
-          location: locationFilterForCountry(country),
-          pageSize: 250,
-        }),
-        emptyListResponse<CouponleoCoupon>(),
-      )),
+    withHydratedRequestState(
+      this.countryQueryParamMap.pipe(startWith(this.initialCountry)),
+      (country) => this.api.listCoupons({
+        active: true,
+        location: locationFilterForCountry(country),
+        pageSize: 250,
+      }),
+      emptyListResponse<CouponleoCoupon>(),
+      () => this.initialLoad?.coupons,
     ),
     { initialValue: createLoadingState(emptyListResponse<CouponleoCoupon>()) },
   );
   private readonly storesState = toSignal(
-    this.countryQueryParamMap.pipe(
-      startWith(this.initialCountry),
-      switchMap((country) => withRequestState(
-        this.api.listStores({
-          location: locationFilterForCountry(country),
-          pageSize: 120,
-        }),
-        emptyListResponse<CouponleoStore>(),
-      )),
+    withHydratedRequestState(
+      this.countryQueryParamMap.pipe(startWith(this.initialCountry)),
+      (country) => this.api.listStores({
+        location: locationFilterForCountry(country),
+        pageSize: 120,
+      }),
+      emptyListResponse<CouponleoStore>(),
+      () => this.initialLoad?.stores,
     ),
     { initialValue: createLoadingState(emptyListResponse<CouponleoStore>()) },
   );

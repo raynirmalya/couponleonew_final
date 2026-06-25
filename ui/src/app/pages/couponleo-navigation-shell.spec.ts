@@ -9,7 +9,7 @@ import { CouponleoHeaderComponent } from '../components/couponleo-header.compone
 import DashboardPage from './dashboard.page';
 import HelpCenterPage from './help-center.page';
 import AlertsPage from './alerts.page';
-import WishlistPage from './saved.page';
+import WishlistPage from './wishlist-content';
 import {
   CouponleoAuthService,
   type CouponleoSession,

@@ -1,6 +1,8 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { type PageServerLoad } from '@analogjs/router';
+import { of } from 'rxjs';
 import { CouponleoEonIconComponent } from '../components/couponleo-eon-icon.component';
 import { CouponleoNewsletterFormComponent } from '../components/couponleo-newsletter-form.component';
 import {
@@ -10,8 +12,9 @@ import {
 } from '../services/couponleo-api.service';
 import { CouponleoI18nService } from '../services/couponleo-i18n.service';
 import { CouponleoPageContentService } from '../services/couponleo-page-content.service';
-import { createLoadingState, withRequestState } from '../services/couponleo-request-state.helpers';
+import { createLoadingState, withHydratedRequestState } from '../services/couponleo-request-state.helpers';
 import { createStaticRouteMeta } from '../services/couponleo-route-meta';
+import { fetchCouponleoList } from '../services/couponleo-server-load.helpers';
 import { buildCategoryRoute, buildStoreRoute, formatExpiryLabel, getCategoryPresentation } from '../services/couponleo-ui.helpers';
 
 import tagIconSvg from '@eonui/icons/svg/commerce/eon-tag.svg?raw';
@@ -112,6 +115,17 @@ function emptyArticleResponse(): CouponleoListResponse<CouponleoBlogArticle> {
     pageCount: 1,
     hasNextPage: false,
     hasPreviousPage: false,
+  };
+}
+
+export async function load(pageServerLoad: PageServerLoad) {
+  return {
+    articles: await fetchCouponleoList(
+      pageServerLoad,
+      '/articles',
+      { pageSize: 18 },
+      emptyArticleResponse(),
+    ),
   };
 }
 
@@ -1125,11 +1139,18 @@ function emptyArticleResponse(): CouponleoListResponse<CouponleoBlogArticle> {
 export default class BlogPage {
   private readonly api = inject(CouponleoApiService);
   private readonly content = inject(CouponleoPageContentService);
+  private readonly route = inject(ActivatedRoute);
   protected readonly i18n = inject(CouponleoI18nService);
   protected readonly searchTerm = signal('');
   protected readonly selectedTopic = signal('');
+  private readonly initialLoad = this.route.snapshot.data['load'] as Awaited<ReturnType<typeof load>> | undefined;
   private readonly articleState = toSignal(
-    withRequestState(this.api.listBlogArticles({ pageSize: 18 }), emptyArticleResponse()),
+    withHydratedRequestState(
+      of(undefined),
+      () => this.api.listBlogArticles({ pageSize: 18 }),
+      emptyArticleResponse(),
+      () => this.initialLoad?.articles,
+    ),
     { initialValue: createLoadingState(emptyArticleResponse()) },
   );
   protected readonly labels = computed(() => ({

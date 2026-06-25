@@ -1,6 +1,7 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toObservable, toSignal, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { type PageServerLoad } from '@analogjs/router';
 import { combineLatest, map, of, startWith, debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
 import { injectResponse } from '@analogjs/router/tokens';
 import {
@@ -20,9 +21,14 @@ import {
 } from '../../services/couponleo-api.service';
 import { CouponleoI18nService } from '../../services/couponleo-i18n.service';
 import { couponleoCouponLogoUrl, couponleoStoreLogoUrl } from '../../services/couponleo-logo.helpers';
-import { createLoadingState, withRequestState } from '../../services/couponleo-request-state.helpers';
+import { createLoadingState, withHydratedRequestState } from '../../services/couponleo-request-state.helpers';
 import { createDynamicRouteMeta, humanizeSlug } from '../../services/couponleo-route-meta';
 import { CouponleoSavedService } from '../../services/couponleo-saved.service';
+import {
+  fetchCouponleoData,
+  fetchCouponleoList,
+  readCouponleoQueryParam,
+} from '../../services/couponleo-server-load.helpers';
 import {
   buildCountryRouteQuery,
   buildStoreRoute,
@@ -66,6 +72,36 @@ function emptyCouponListResponse<T>(): CouponleoListResponse<T> {
     pageSize: storeDealsPageSize,
     hasNextPage: false,
     hasPreviousPage: false,
+  };
+}
+
+export async function load(pageServerLoad: PageServerLoad) {
+  const slug = pageServerLoad.params?.['slug'] ?? '';
+  const country = normalizeCountryRouteValue(readCouponleoQueryParam(pageServerLoad, 'country'));
+  const location = locationFilterForCountry(country);
+
+  const store = slug
+    ? await fetchCouponleoData<CouponleoStore | null>(
+      pageServerLoad,
+      `/stores/${encodeURIComponent(slug)}`,
+      null,
+    )
+    : null;
+
+  if (!store) {
+    pageServerLoad.res.statusCode = 404;
+  }
+
+  return {
+    coupons: slug
+      ? await fetchCouponleoList(
+        pageServerLoad,
+        `/coupons/store/${encodeURIComponent(slug)}`,
+        { active: true, location, page: 1, pageSize: storeDealsPageSize },
+        emptyCouponListResponse<CouponleoCoupon>(),
+      )
+      : emptyCouponListResponse<CouponleoCoupon>(),
+    store,
   };
 }
 
@@ -370,6 +406,7 @@ export default class StoreDealsPage {
   private readonly route = inject(ActivatedRoute);
   private readonly response = injectResponse();
   private readonly savedService = inject(CouponleoSavedService);
+  private readonly initialLoad = this.route.snapshot.data['load'] as Awaited<ReturnType<typeof load>> | undefined;
   private readonly initialCountry = normalizeCountryRouteValue(this.route.snapshot.queryParamMap.get('country'));
 
   private readonly storeSlug$ = this.route.paramMap.pipe(
@@ -390,44 +427,44 @@ export default class StoreDealsPage {
   protected readonly countryRouteQuery = computed(() => buildCountryRouteQuery(this.selectedCountry()));
 
   private readonly storeState = toSignal(
-    this.storeSlug$.pipe(
-      switchMap((slug) => (
+    withHydratedRequestState(
+      this.storeSlug$,
+      (slug) => (
         slug
-          ? withRequestState(
-            this.api.getStore(slug).pipe(map((response) => response.data)),
-            null as CouponleoStore | null,
-          )
-          : of({ data: null, loading: false })
-      )),
+          ? this.api.getStore(slug).pipe(map((response) => response.data))
+          : of(null)
+      ),
+      null as CouponleoStore | null,
+      () => this.initialLoad?.store,
     ),
     { initialValue: createLoadingState<CouponleoStore | null>(null) },
   );
 
   private readonly couponsState = toSignal(
-    combineLatest([
-      this.storeSlug$,
-      toObservable(this.searchQuery).pipe(
-        debounceTime(150),
-        distinctUntilChanged(),
-        startWith(''),
-      ),
-      toObservable(this.dealPage).pipe(startWith(1)),
-      this.countryQueryParamMap.pipe(startWith(this.initialCountry)),
-    ]).pipe(
-      switchMap(([slug, query, page, country]) => (
+    withHydratedRequestState(
+      combineLatest([
+        this.storeSlug$,
+        toObservable(this.searchQuery).pipe(
+          debounceTime(150),
+          distinctUntilChanged(),
+          startWith(''),
+        ),
+        toObservable(this.dealPage).pipe(startWith(1)),
+        this.countryQueryParamMap.pipe(startWith(this.initialCountry)),
+      ]),
+      ([slug, query, page, country]) => (
         slug
-          ? withRequestState(
-            this.api.listCouponsByStore(slug, {
-              active: true,
-              location: locationFilterForCountry(country),
-              page,
-              pageSize: storeDealsPageSize,
-              q: query.trim() || undefined,
-            }),
-            emptyCouponListResponse<CouponleoCoupon>(),
-          )
-          : of({ data: emptyCouponListResponse<CouponleoCoupon>(), loading: false })
-      )),
+          ? this.api.listCouponsByStore(slug, {
+            active: true,
+            location: locationFilterForCountry(country),
+            page,
+            pageSize: storeDealsPageSize,
+            q: query.trim() || undefined,
+          })
+          : of(emptyCouponListResponse<CouponleoCoupon>())
+      ),
+      emptyCouponListResponse<CouponleoCoupon>(),
+      () => this.initialLoad?.coupons,
     ),
     { initialValue: createLoadingState(emptyCouponListResponse<CouponleoCoupon>()) },
   );

@@ -50,7 +50,12 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     ...(mode === 'test' ? [eonIconRawStubPlugin()] : []),
-    analog(),
+    analog({
+      prerender: {
+        routes: [],
+      },
+      ssr: true,
+    }),
   ],
   test: {
     globals: true,

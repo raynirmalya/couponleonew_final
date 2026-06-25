@@ -14,7 +14,7 @@
     "build": "vite build",
     "watch": "vite build --watch",
     "test": "vitest",
-    "preview": "node dist/analog/server/index.mjs"
+    "preview": "node --max-old-space-size=8192 dist/analog/server/index.mjs"
   },
   "private": true,
   "dependencies": {

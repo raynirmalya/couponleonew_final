@@ -1,6 +1,7 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { type PageServerLoad } from '@analogjs/router';
 import { combineLatest, debounceTime, distinctUntilChanged, map, of, startWith, switchMap } from 'rxjs';
 import { injectResponse } from '@analogjs/router/tokens';
 
@@ -23,9 +24,14 @@ import {
 } from '../../services/couponleo-api.service';
 import { CouponleoI18nService } from '../../services/couponleo-i18n.service';
 import { couponleoCouponLogoUrl, couponleoStoreLogoUrl } from '../../services/couponleo-logo.helpers';
-import { createLoadingState, withRequestState } from '../../services/couponleo-request-state.helpers';
+import { createLoadingState, withHydratedRequestState } from '../../services/couponleo-request-state.helpers';
 import { createDynamicRouteMeta, humanizeSlug } from '../../services/couponleo-route-meta';
 import { CouponleoSavedService } from '../../services/couponleo-saved.service';
+import {
+  fetchCouponleoData,
+  fetchCouponleoList,
+  readCouponleoQueryParam,
+} from '../../services/couponleo-server-load.helpers';
 import {
   buildCategoryRoute,
   buildCountryRouteQuery,
@@ -95,6 +101,50 @@ function emptyListResponse<T>(): CouponleoListResponse<T> {
   return {
     items: [] as T[],
     total: 0,
+  };
+}
+
+export async function load(pageServerLoad: PageServerLoad) {
+  const slug = pageServerLoad.params?.['slug'] ?? '';
+  const country = normalizeCountryRouteValue(readCouponleoQueryParam(pageServerLoad, 'country'));
+  const location = country === 'all' ? undefined : country;
+
+  const category = slug
+    ? await fetchCouponleoData<CouponleoCategory | null>(
+      pageServerLoad,
+      `/categories/${encodeURIComponent(slug)}`,
+      null,
+    )
+    : null;
+
+  if (!category) {
+    pageServerLoad.res.statusCode = 404;
+  }
+
+  return {
+    category,
+    coupons: slug
+      ? await fetchCouponleoList(
+        pageServerLoad,
+        '/coupons',
+        { active: true, category: slug, location, page: 1, pageSize: categoryDealsPageSize },
+        emptyCouponListResponse<CouponleoCoupon>(),
+      )
+      : emptyCouponListResponse<CouponleoCoupon>(),
+    locations: await fetchCouponleoList(
+      pageServerLoad,
+      '/locations',
+      { pageSize: 250 },
+      emptyListResponse<CouponleoLocation>(),
+    ),
+    stores: slug
+      ? await fetchCouponleoList(
+        pageServerLoad,
+        '/stores',
+        { category: slug, location, pageSize: 6 },
+        emptyListResponse<CouponleoStore>(),
+      )
+      : emptyListResponse<CouponleoStore>(),
   };
 }
 
@@ -563,6 +613,7 @@ export default class CategoryDealsPage {
   private readonly router = inject(Router);
   private readonly response = injectResponse();
   private readonly savedService = inject(CouponleoSavedService);
+  private readonly initialLoad = this.route.snapshot.data['load'] as Awaited<ReturnType<typeof load>> | undefined;
   private readonly initialCountry = normalizeCountryRouteValue(this.route.snapshot.queryParamMap.get('country'));
 
   private readonly categorySlug$ = this.route.paramMap.pipe(
@@ -583,70 +634,75 @@ export default class CategoryDealsPage {
   protected readonly categorySlug = toSignal(this.categorySlug$, { initialValue: '' });
 
   private readonly categoryState = toSignal(
-    this.categorySlug$.pipe(
-      switchMap((slug) => (
+    withHydratedRequestState(
+      this.categorySlug$,
+      (slug) => (
         slug
-          ? withRequestState(
-            this.api.getCategory(slug).pipe(map((response) => response.data)),
-            null as CouponleoCategory | null,
-          )
-          : of({ data: null, loading: false })
-      )),
+          ? this.api.getCategory(slug).pipe(map((response) => response.data))
+          : of(null)
+      ),
+      null as CouponleoCategory | null,
+      () => this.initialLoad?.category,
     ),
     { initialValue: createLoadingState<CouponleoCategory | null>(null) },
   );
 
   private readonly locationsState = toSignal(
-    withRequestState(this.api.listLocations({ pageSize: 250 }), emptyListResponse<CouponleoLocation>()),
+    withHydratedRequestState(
+      of(undefined),
+      () => this.api.listLocations({ pageSize: 250 }),
+      emptyListResponse<CouponleoLocation>(),
+      () => this.initialLoad?.locations,
+    ),
     { initialValue: createLoadingState(emptyListResponse<CouponleoLocation>()) },
   );
 
   private readonly couponsState = toSignal(
-    combineLatest([
-      this.categorySlug$,
-      toObservable(this.searchQuery).pipe(
-        debounceTime(150),
-        distinctUntilChanged(),
-        startWith(''),
-      ),
-      toObservable(this.selectedCountry).pipe(startWith('all')),
-      toObservable(this.dealPage).pipe(startWith(1)),
-    ]).pipe(
-      switchMap(([slug, query, country, page]) => (
+    withHydratedRequestState(
+      combineLatest([
+        this.categorySlug$,
+        toObservable(this.searchQuery).pipe(
+          debounceTime(150),
+          distinctUntilChanged(),
+          startWith(''),
+        ),
+        toObservable(this.selectedCountry).pipe(startWith('all')),
+        toObservable(this.dealPage).pipe(startWith(1)),
+      ]),
+      ([slug, query, country, page]) => (
         slug
-          ? withRequestState(
-            this.api.listCouponsByCategory(slug, {
-              active: true,
-              location: country === 'all' ? undefined : country,
-              page,
-              pageSize: categoryDealsPageSize,
-              q: query.trim() || undefined,
-            }),
-            emptyCouponListResponse<CouponleoCoupon>(),
-          )
-          : of({ data: emptyCouponListResponse<CouponleoCoupon>(), loading: false })
-      )),
+          ? this.api.listCouponsByCategory(slug, {
+            active: true,
+            location: country === 'all' ? undefined : country,
+            page,
+            pageSize: categoryDealsPageSize,
+            q: query.trim() || undefined,
+          })
+          : of(emptyCouponListResponse<CouponleoCoupon>())
+      ),
+      emptyCouponListResponse<CouponleoCoupon>(),
+      () => this.initialLoad?.coupons,
     ),
     { initialValue: createLoadingState(emptyCouponListResponse<CouponleoCoupon>()) },
   );
 
   private readonly storesState = toSignal(
-    combineLatest([
-      this.categorySlug$,
-      toObservable(this.selectedCountry).pipe(startWith('all')),
-    ]).pipe(
-      switchMap(([slug, country]) => (
+    withHydratedRequestState(
+      combineLatest([
+        this.categorySlug$,
+        toObservable(this.selectedCountry).pipe(startWith('all')),
+      ]),
+      ([slug, country]) => (
         slug
-          ? withRequestState(
-            this.api.listStores({
-              category: slug,
-              location: country === 'all' ? undefined : country,
-              pageSize: 6,
-            }),
-            emptyListResponse<CouponleoStore>(),
-          )
-          : of({ data: emptyListResponse<CouponleoStore>(), loading: false })
-      )),
+          ? this.api.listStores({
+            category: slug,
+            location: country === 'all' ? undefined : country,
+            pageSize: 6,
+          })
+          : of(emptyListResponse<CouponleoStore>())
+      ),
+      emptyListResponse<CouponleoStore>(),
+      () => this.initialLoad?.stores,
     ),
     { initialValue: createLoadingState(emptyListResponse<CouponleoStore>()) },
   );
