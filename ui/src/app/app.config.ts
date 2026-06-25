@@ -2,6 +2,7 @@ import { isPlatformServer } from '@angular/common';
 import {
   provideHttpClient,
   withInterceptors,
+  withFetch,
 } from '@angular/common/http';
 import {
   ApplicationConfig,
@@ -68,6 +69,7 @@ export const appConfig: ApplicationConfig = {
       ]),
     ),
     provideHttpClient(
+      withFetch(),
       withInterceptors([requestContextInterceptor])
     ),
     provideClientHydration(withEventReplay()),

@@ -14,6 +14,7 @@ $dataFile = Join-Path $apiDir "data\local-couponleo-data.json"
 $snapshotWarmScript = Join-Path $apiDir "warm_couponleo_snapshot.py"
 
 $python = (Get-Command python -ErrorAction Stop).Source
+$node = (Get-Command node -ErrorAction Stop).Source
 $npm = (Get-Command npm -ErrorAction Stop).Source
 
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -66,17 +67,19 @@ function Wait-Url {
   return $false
 }
 
-Stop-ProjectProcessByPort -Port $UiPort -PathHints @("couponleo_ultimate\ui", "vite.js", "serve-local.mjs")
+Stop-ProjectProcessByPort -Port $UiPort -PathHints @("couponleo_ultimate\ui", "couponleonew_final\ui", "vite.js", "serve-local.mjs", "server/index.mjs")
 Stop-ProjectProcessByPort -Port $ApiPort -PathHints @("couponleo_ultimate\api", "couponleo.py", "flask --app couponleo")
 
 $apiOut = Join-Path $logDir "api.out.log"
 $apiErr = Join-Path $logDir "api.err.log"
 $uiOut = Join-Path $logDir "ui.out.log"
 $uiErr = Join-Path $logDir "ui.err.log"
+$uiBuildOut = Join-Path $logDir "ui-build.out.log"
+$uiBuildErr = Join-Path $logDir "ui-build.err.log"
 $snapshotOut = Join-Path $logDir "snapshot.out.log"
 $snapshotErr = Join-Path $logDir "snapshot.err.log"
 
-Remove-Item $apiOut, $apiErr, $uiOut, $uiErr -Force -ErrorAction SilentlyContinue
+Remove-Item $apiOut, $apiErr, $uiOut, $uiErr, $uiBuildOut, $uiBuildErr -Force -ErrorAction SilentlyContinue
 
 if (-not (Test-Path $dataFile) -and (Test-Path $snapshotWarmScript)) {
   Write-Host "No local CouponLeo snapshot found. Warming cache from the public API..."
@@ -96,6 +99,38 @@ $apiEnvSegments = @(
   "set COUPONLEO_DATA_FILE=$dataFile"
 )
 
+if ($UseLocalData) {
+  $apiEnvSegments += @(
+    'set "COUPONLEO_DB_HOST= "',
+    'set "CPLODB_HOST= "',
+    'set "MYSQL_HOST= "',
+    'set "DB_HOST= "',
+    'set "host= "',
+    'set "COUPONLEO_DB_USER= "',
+    'set "CPLODB_USER= "',
+    'set "MYSQL_USER= "',
+    'set "DB_USER= "',
+    'set "DB_USERNAME1= "',
+    'set "COUPONLEO_DB_PASSWORD= "',
+    'set "CPLODB_PASSWORD= "',
+    'set "MYSQL_PASSWORD= "',
+    'set "DB_PASSWORD1= "',
+    'set "DB_PASSWORD= "',
+    'set "DB_PASS= "',
+    'set "COUPONLEO_DB_NAME= "',
+    'set "CPLODB_NAME= "',
+    'set "MYSQL_DB= "',
+    'set "MYSQL_DATABASE= "',
+    'set "DB_NAME= "',
+    'set "database2= "',
+    'set "COUPONLEO_DB_PORT= "',
+    'set "CPLODB_PORT= "',
+    'set "MYSQL_PORT= "',
+    'set "DB_PORT= "',
+    'set "port= "'
+  )
+}
+
 $apiCommand = ($apiEnvSegments -join "&&") + "&&cd /d $apiDir&&""$python"" couponleo.py"
 
 $apiProc = Start-Process `
@@ -106,9 +141,17 @@ $apiProc = Start-Process `
   -RedirectStandardError $apiErr `
   -PassThru
 
+Write-Host "Building CouponLeo UI SSR bundle..."
+Push-Location $uiDir
+try {
+  & $npm run build 1>> $uiBuildOut 2>> $uiBuildErr
+} finally {
+  Pop-Location
+}
+
 $uiProc = Start-Process `
   -FilePath "C:\Windows\System32\cmd.exe" `
-  -ArgumentList "/c", "set PORT=$UiPort&&set HOST=127.0.0.1&&cd /d $uiDir&&""$npm"" run dev -- --host 127.0.0.1 --port $UiPort" `
+  -ArgumentList "/c", "set PORT=$UiPort&&set HOST=127.0.0.1&&set NITRO_PORT=$UiPort&&set NITRO_HOST=127.0.0.1&&cd /d $uiDir\dist\analog&&""$node"" server/index.mjs" `
   -WindowStyle Hidden `
   -RedirectStandardOutput $uiOut `
   -RedirectStandardError $uiErr `

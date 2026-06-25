@@ -8,7 +8,8 @@
   "scripts": {
     "ng": "ng",
     "dev": "vite",
-    "start": "npm run dev",
+    "start": "node dist/analog/server/index.mjs",
+    "start:dev": "npm run dev",
     "generate:sitemap": "node scripts/generate-sitemap.mjs",
     "prebuild": "npm run generate:sitemap",
     "build": "vite build",
