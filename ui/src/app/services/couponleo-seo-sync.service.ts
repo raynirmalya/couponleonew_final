@@ -2,10 +2,12 @@ import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { Injectable, PLATFORM_ID, effect, inject } from '@angular/core';
 import { Meta, Title } from '@angular/platform-browser';
 import { NavigationEnd, Router } from '@angular/router';
-import { filter, startWith } from 'rxjs';
+import { filter } from 'rxjs';
 import { injectBaseURL } from '@analogjs/router/tokens';
+import { COUPONLEO_DEFAULT_LOCALE } from './couponleo-i18n.catalog';
 import { CouponleoI18nService } from './couponleo-i18n.service';
 import { CouponleoLocaleService } from './couponleo-locale.service';
+import { normalizeCountryRouteValue } from './couponleo-ui.helpers';
 
 const CANONICAL_REL = 'canonical';
 const HREFLANG_SELECTOR = 'link[rel="alternate"][hreflang]';
@@ -16,6 +18,24 @@ const CANONICAL_ROUTE_ALIASES: Record<string, string> = {
   '/signin': '/sign-in',
   '/signup': '/sign-up',
 };
+const COUNTRY_AWARE_ROUTE_PATTERNS = [
+  /^\/$/,
+  /^\/categories$/,
+  /^\/categories\/[^/]+$/,
+  /^\/country-deals$/,
+  /^\/stores$/,
+  /^\/stores\/[^/]+$/,
+  /^\/top-deals$/,
+];
+const PAGE_ROUTE_PATTERNS = [
+  /^\/categories$/,
+  /^\/categories\/[^/]+$/,
+  /^\/stores$/,
+  /^\/stores\/[^/]+$/,
+  /^\/top-deals$/,
+];
+const COUNTRY_DEALS_PAGE_QUERY_KEYS = ['marketPage', 'categoryPage', 'storePage'] as const;
+const INTERNAL_QUERY_KEYS = ['activationToken', 'close', 'email', 'intent', 'mode', 'next', 'resetToken', 'returnUrl'];
 
 @Injectable({ providedIn: 'root' })
 export class CouponleoSeoSyncService {
@@ -38,11 +58,14 @@ export class CouponleoSeoSyncService {
     this.router.events
       .pipe(
         filter((event) => event instanceof NavigationEnd),
-        startWith(null),
       )
       .subscribe(() => {
-        this.syncDocumentLinks();
+        queueMicrotask(() => this.syncDocumentLinks());
       });
+
+    if (this.router.navigated) {
+      queueMicrotask(() => this.syncDocumentLinks());
+    }
   }
 
   private syncDocumentLinks(): void {
@@ -76,6 +99,8 @@ export class CouponleoSeoSyncService {
       currentUrl.pathname = canonicalPath;
     }
 
+    this.normalizeCanonicalQuery(currentUrl);
+
     return currentUrl.toString();
   }
 
@@ -89,6 +114,56 @@ export class CouponleoSeoSyncService {
     }
 
     return 'https://couponleo.com';
+  }
+
+  private normalizeCanonicalQuery(currentUrl: URL): void {
+    const pathname = currentUrl.pathname.replace(/\/+$/, '') || '/';
+    const supportsCountry = COUNTRY_AWARE_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname));
+    const supportsPage = PAGE_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname));
+
+    for (const key of INTERNAL_QUERY_KEYS) {
+      currentUrl.searchParams.delete(key);
+    }
+
+    if (!supportsCountry || normalizeCountryRouteValue(currentUrl.searchParams.get('country')) === 'all') {
+      currentUrl.searchParams.delete('country');
+    }
+
+    if (currentUrl.searchParams.get('lang') === COUPONLEO_DEFAULT_LOCALE) {
+      currentUrl.searchParams.delete('lang');
+    }
+
+    if (supportsPage) {
+      this.normalizePageQueryParam(currentUrl, 'page');
+    } else {
+      currentUrl.searchParams.delete('page');
+    }
+
+    if (pathname === '/country-deals') {
+      for (const key of COUNTRY_DEALS_PAGE_QUERY_KEYS) {
+        this.normalizePageQueryParam(currentUrl, key);
+      }
+    } else {
+      for (const key of COUNTRY_DEALS_PAGE_QUERY_KEYS) {
+        currentUrl.searchParams.delete(key);
+      }
+    }
+  }
+
+  private normalizePageQueryParam(currentUrl: URL, key: string): void {
+    const normalizedPage = this.normalizePageRouteValue(currentUrl.searchParams.get(key));
+
+    if (normalizedPage <= 1) {
+      currentUrl.searchParams.delete(key);
+      return;
+    }
+
+    currentUrl.searchParams.set(key, String(normalizedPage));
+  }
+
+  private normalizePageRouteValue(value: string | number | null | undefined): number {
+    const parsedValue = Number.parseInt(String(value ?? ''), 10);
+    return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : 1;
   }
 
   private updateCanonicalLink(href: string): void {
