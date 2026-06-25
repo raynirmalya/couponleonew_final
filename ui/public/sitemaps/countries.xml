@@ -97,13 +97,13 @@
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=China</loc>
+    <loc>https://couponleo.com/country-deals?country=Poland</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Poland</loc>
+    <loc>https://couponleo.com/country-deals?country=China</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
@@ -187,13 +187,13 @@
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Austria</loc>
+    <loc>https://couponleo.com/country-deals?country=New+Zealand</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=New+Zealand</loc>
+    <loc>https://couponleo.com/country-deals?country=Austria</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
@@ -253,13 +253,13 @@
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Turkey</loc>
+    <loc>https://couponleo.com/country-deals?country=Norway</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Norway</loc>
+    <loc>https://couponleo.com/country-deals?country=Turkey</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
@@ -277,13 +277,13 @@
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Argentina</loc>
+    <loc>https://couponleo.com/country-deals?country=Guernsey</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Guernsey</loc>
+    <loc>https://couponleo.com/country-deals?country=Argentina</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
@@ -367,13 +367,13 @@
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Bulgaria</loc>
+    <loc>https://couponleo.com/country-deals?country=South+Africa</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Georgia</loc>
+    <loc>https://couponleo.com/country-deals?country=Bulgaria</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
@@ -385,25 +385,25 @@
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Latvia</loc>
-    <lastmod>2026-06-25</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.80</priority>
-  </url>
-  <url>
-    <loc>https://couponleo.com/country-deals?country=South+Africa</loc>
-    <lastmod>2026-06-25</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.80</priority>
-  </url>
-  <url>
     <loc>https://couponleo.com/country-deals?country=Uruguay</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
   </url>
   <url>
+    <loc>https://couponleo.com/country-deals?country=Latvia</loc>
+    <lastmod>2026-06-25</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.80</priority>
+  </url>
+  <url>
     <loc>https://couponleo.com/country-deals?country=Paraguay</loc>
+    <lastmod>2026-06-25</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.80</priority>
+  </url>
+  <url>
+    <loc>https://couponleo.com/country-deals?country=Georgia</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
@@ -428,6 +428,12 @@
   </url>
   <url>
     <loc>https://couponleo.com/country-deals?country=Bahrain</loc>
+    <lastmod>2026-06-25</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.80</priority>
+  </url>
+  <url>
+    <loc>https://couponleo.com/country-deals?country=Ethiopia</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
@@ -481,13 +487,19 @@
     <priority>0.80</priority>
   </url>
   <url>
+    <loc>https://couponleo.com/country-deals?country=Oman</loc>
+    <lastmod>2026-06-25</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.80</priority>
+  </url>
+  <url>
     <loc>https://couponleo.com/country-deals?country=Malta</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://couponleo.com/country-deals?country=Oman</loc>
+    <loc>https://couponleo.com/country-deals?country=Nigeria</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
@@ -500,12 +512,6 @@
   </url>
   <url>
     <loc>https://couponleo.com/country-deals?country=Bangladesh</loc>
-    <lastmod>2026-06-25</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.80</priority>
-  </url>
-  <url>
-    <loc>https://couponleo.com/country-deals?country=Nigeria</loc>
     <lastmod>2026-06-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.80</priority>
