@@ -708,6 +708,44 @@ class CouponLeoRepository:
 
         return None
 
+    def _fallback_precomputed_store_item(self, identifier: str) -> Optional[Dict[str, Any]]:
+        target = _clean_text(identifier).lower()
+        if not target:
+            return None
+
+        target_host = _normalize_host(target)
+        candidate_sources = [
+            self._load_precomputed_summary("featured-stores.json") or [],
+            self._load_precomputed_summary("stores-summary.json") or [],
+        ]
+        seen_keys: set[str] = set()
+
+        for items in candidate_sources:
+            for item in items:
+                item_key = _clean_text(item.get("slug")).lower() or _clean_text(item.get("id")).lower()
+                if item_key and item_key in seen_keys:
+                    continue
+                if item_key:
+                    seen_keys.add(item_key)
+
+                candidates = {
+                    _clean_text(item.get("id")).lower(),
+                    _clean_text(item.get("slug")).lower(),
+                    _clean_text(item.get("name")).lower(),
+                    _normalize_host(item.get("url")),
+                }
+
+                for domain_key in ("domains", "matchDomains"):
+                    raw_domains = item.get(domain_key)
+                    if isinstance(raw_domains, list):
+                        candidates.update(_clean_text(value).lower() for value in raw_domains if _clean_text(value))
+
+                normalized_candidates = {candidate for candidate in candidates if candidate}
+                if target in normalized_candidates or (target_host and target_host in normalized_candidates):
+                    return self._enrich_store_record(item)
+
+        return None
+
     def _fallback_precomputed_location_page(
         self,
         *,
@@ -2045,6 +2083,10 @@ class CouponLeoRepository:
         cached = self._read_direct_cache(cache_key)
         if cached is not None:
             return cached
+
+        precomputed_store = self._fallback_precomputed_store_item(identifier)
+        if precomputed_store is not None:
+            return self._write_direct_cache(cache_key, precomputed_store)
 
         self._load_data()
         if self._data_source != "seed":

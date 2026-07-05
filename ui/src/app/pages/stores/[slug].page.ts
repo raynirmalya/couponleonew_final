@@ -773,7 +773,7 @@ export default class StoreDealsPage {
           : of(null)
       ),
       null as CouponleoStore | null,
-      () => this.initialLoad?.store,
+      () => this.initialLoad?.store ?? undefined,
     ),
     { initialValue: createLoadingState<CouponleoStore | null>(null) },
   );
@@ -802,7 +802,24 @@ export default class StoreDealsPage {
           : of(emptyCouponListResponse<CouponleoCoupon>())
       ),
       emptyCouponListResponse<CouponleoCoupon>(),
-      () => this.initialLoad?.coupons,
+      () => {
+        const initialCoupons = this.initialLoad?.coupons;
+        const initialStore = this.initialLoad?.store;
+        const hasKnownLiveOffers = Math.max(
+          0,
+          Number(initialStore?.activeCoupons ?? initialStore?.couponCount ?? 0),
+        ) > 0;
+
+        if (!initialCoupons) {
+          return undefined;
+        }
+
+        if ((initialCoupons.total ?? 0) === 0 && hasKnownLiveOffers) {
+          return undefined;
+        }
+
+        return initialCoupons;
+      },
     ),
     { initialValue: createLoadingState(emptyCouponListResponse<CouponleoCoupon>()) },
   );

@@ -8,6 +8,7 @@ import type {
 type QueryParamValue = string | number | boolean | null | undefined;
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
+const SERVER_FETCH_TIMEOUT_MS = 8000;
 
 function firstHeaderValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -16,6 +17,21 @@ function firstHeaderValue(value: string | string[] | undefined): string | undefi
 function localApiPort(): string {
   return (globalThis as { process?: { env?: Record<string, string | undefined> } })
     .process?.env?.['COUPONLEO_API_PORT'] ?? '5000';
+}
+
+function internalCouponleoApiBase(): string | null {
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env ?? {};
+  const port = env['COUPONLEO_API_PORT']?.trim();
+
+  if (!port) {
+    return null;
+  }
+
+  const protocol = env['COUPONLEO_API_PROTOCOL']?.trim() || 'http';
+  const host = env['COUPONLEO_API_HOST']?.trim() || '127.0.0.1';
+
+  return `${protocol}://${host}:${port}/couponleo/api`;
 }
 
 export function getCouponleoRequestUrl(req: PageServerLoad['req']): URL {
@@ -34,6 +50,11 @@ export function readCouponleoQueryParam(load: PageServerLoad, key: string): stri
 }
 
 function resolveCouponleoApiBase(load: PageServerLoad): string {
+  const internalApiBase = internalCouponleoApiBase();
+  if (internalApiBase) {
+    return internalApiBase;
+  }
+
   const requestUrl = getCouponleoRequestUrl(load.req);
 
   if (LOOPBACK_HOSTS.has(requestUrl.hostname)) {
@@ -70,6 +91,17 @@ function buildCouponleoApiUrl(
   return `${resolveCouponleoApiBase(load)}${path}${buildQueryString(params)}`;
 }
 
+async function fetchCouponleoServerPayload<T>(load: PageServerLoad, url: string): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SERVER_FETCH_TIMEOUT_MS);
+
+  try {
+    return await load.fetch<T>(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function fetchCouponleoList<T>(
   load: PageServerLoad,
   path: string,
@@ -77,7 +109,10 @@ export async function fetchCouponleoList<T>(
   fallback: CouponleoListResponse<T>,
 ): Promise<CouponleoListResponse<T>> {
   try {
-    return await load.fetch<CouponleoListResponse<T>>(buildCouponleoApiUrl(load, path, params));
+    return await fetchCouponleoServerPayload<CouponleoListResponse<T>>(
+      load,
+      buildCouponleoApiUrl(load, path, params),
+    );
   } catch {
     return fallback;
   }
@@ -90,7 +125,10 @@ export async function fetchCouponleoData<T>(
   params: Record<string, QueryParamValue> = {},
 ): Promise<T> {
   try {
-    const response = await load.fetch<CouponleoDataResponse<T>>(buildCouponleoApiUrl(load, path, params));
+    const response = await fetchCouponleoServerPayload<CouponleoDataResponse<T>>(
+      load,
+      buildCouponleoApiUrl(load, path, params),
+    );
     return response.data;
   } catch {
     return fallback;
