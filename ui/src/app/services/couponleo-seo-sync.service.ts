@@ -445,7 +445,7 @@ export class CouponleoSeoSyncService {
 
     for (const [index, segment] of segments.entries()) {
       cumulativePath += `/${segment}`;
-      let name = routeLabels[segment] ?? humanizeSlug(segment);
+      let name = this.i18n.phrase(routeLabels[segment] ?? humanizeSlug(segment));
       const isLastSegment = index === segments.length - 1;
 
       if (cumulativePath === '/country-deals') {

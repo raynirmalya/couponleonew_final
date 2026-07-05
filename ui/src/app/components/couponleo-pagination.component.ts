@@ -66,6 +66,8 @@ function buildPaginationItems(currentPage: number, totalPages: number): Paginati
             class="couponleo-pagination__button"
             [disabled]="page() <= 1"
             (click)="selectPage(page() - 1)"
+            data-telemetry-event="pagination_previous"
+            [attr.data-telemetry-label]="itemLabel()"
           >
             {{ labels().previous }}
           </button>
@@ -79,6 +81,8 @@ function buildPaginationItems(currentPage: number, totalPages: number): Paginati
                   [class.is-active]="item.value === page()"
                   [attr.aria-current]="item.value === page() ? 'page' : null"
                   (click)="selectPage(item.value)"
+                  data-telemetry-event="pagination_page_select"
+                  [attr.data-telemetry-label]="'Page ' + item.value + ' ' + itemLabel()"
                 >
                   {{ item.value }}
                 </button>
@@ -93,6 +97,8 @@ function buildPaginationItems(currentPage: number, totalPages: number): Paginati
             class="couponleo-pagination__button"
             [disabled]="page() >= pageCount()"
             (click)="selectPage(page() + 1)"
+            data-telemetry-event="pagination_next"
+            [attr.data-telemetry-label]="itemLabel()"
           >
             {{ labels().next }}
           </button>

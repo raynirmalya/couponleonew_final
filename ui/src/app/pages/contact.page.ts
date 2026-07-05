@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CouponleoI18nService } from '../services/couponleo-i18n.service';
 import { createStaticRouteMeta } from '../services/couponleo-route-meta';
+import { localizeCouponleoRoute } from '../services/couponleo-ui.helpers';
 
 export const routeMeta = createStaticRouteMeta({
   title: 'Contact CouponLeo',
@@ -23,21 +24,21 @@ export const routeMeta = createStaticRouteMeta({
         <article class="couponleo-card">
           <span class="couponleo-card__badge">{{ i18n.t('contact.supportBadge') }}</span>
           <h2>{{ i18n.t('contact.supportTitle') }}</h2>
-          <p><a href="mailto:support@couponleo.com">support@couponleo.com</a></p>
+          <p><a href="mailto:support@couponleo.com" data-telemetry-event="contact_support_email" data-telemetry-label="support@couponleo.com">support@couponleo.com</a></p>
           <small>{{ i18n.t('contact.supportCopy') }}</small>
         </article>
 
         <article class="couponleo-card">
           <span class="couponleo-card__badge">{{ i18n.t('contact.partnershipsBadge') }}</span>
           <h2>{{ i18n.t('contact.partnershipsTitle') }}</h2>
-          <p><a href="mailto:partners@couponleo.com">partners@couponleo.com</a></p>
+          <p><a href="mailto:partners@couponleo.com" data-telemetry-event="contact_partnerships_email" data-telemetry-label="partners@couponleo.com">partners@couponleo.com</a></p>
           <small>{{ i18n.t('contact.partnershipsCopy') }}</small>
         </article>
 
         <article class="couponleo-card">
           <span class="couponleo-card__badge">{{ i18n.t('contact.feedbackBadge') }}</span>
           <h2>{{ i18n.t('contact.feedbackTitle') }}</h2>
-          <p><a href="mailto:hello@couponleo.com">hello@couponleo.com</a></p>
+          <p><a href="mailto:hello@couponleo.com" data-telemetry-event="contact_feedback_email" data-telemetry-label="hello@couponleo.com">hello@couponleo.com</a></p>
           <small>{{ i18n.t('contact.feedbackCopy') }}</small>
         </article>
       </div>
@@ -51,9 +52,27 @@ export const routeMeta = createStaticRouteMeta({
         </div>
 
         <div class="couponleo-contact-note__actions">
-          <a class="couponleo-button couponleo-button--ghost" routerLink="/help-center" queryParamsHandling="preserve">{{ i18n.t('contact.openHelpCenter') }}</a>
-          <a class="couponleo-button couponleo-button--ghost" routerLink="/privacy-policy" queryParamsHandling="preserve">{{ i18n.t('contact.readPrivacy') }}</a>
-          <a class="couponleo-button couponleo-button--ghost" routerLink="/terms-of-use" queryParamsHandling="preserve">{{ i18n.t('contact.readTerms') }}</a>
+          <a
+            class="couponleo-button couponleo-button--ghost"
+            [routerLink]="localizeRoute('/help-center')"
+            queryParamsHandling="preserve"
+            data-telemetry-event="contact_help_center_open"
+            [attr.data-telemetry-label]="i18n.t('contact.openHelpCenter')"
+          >{{ i18n.t('contact.openHelpCenter') }}</a>
+          <a
+            class="couponleo-button couponleo-button--ghost"
+            [routerLink]="localizeRoute('/privacy-policy')"
+            queryParamsHandling="preserve"
+            data-telemetry-event="contact_privacy_open"
+            [attr.data-telemetry-label]="i18n.t('contact.readPrivacy')"
+          >{{ i18n.t('contact.readPrivacy') }}</a>
+          <a
+            class="couponleo-button couponleo-button--ghost"
+            [routerLink]="localizeRoute('/terms-of-use')"
+            queryParamsHandling="preserve"
+            data-telemetry-event="contact_terms_open"
+            [attr.data-telemetry-label]="i18n.t('contact.readTerms')"
+          >{{ i18n.t('contact.readTerms') }}</a>
         </div>
       </div>
     </section>
@@ -113,4 +132,8 @@ export const routeMeta = createStaticRouteMeta({
 })
 export default class ContactPage {
   protected readonly i18n = inject(CouponleoI18nService);
+
+  protected localizeRoute(path: string): string {
+    return localizeCouponleoRoute(path, this.i18n.locale());
+  }
 }

@@ -6,7 +6,7 @@ import { createStaticRouteMeta } from '../services/couponleo-route-meta';
 
 export const routeMeta = createStaticRouteMeta({
   title: 'Help Center | CouponLeo',
-  description: 'Get support for CouponLeo member workflows, public browsing routes, merchant redirects, and trust pages.',
+  description: 'Find help with sign-in, saved items, shopping discovery, and CouponLeo policies in one place.',
 });
 
 @Component({

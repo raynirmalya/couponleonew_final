@@ -12,6 +12,7 @@ $apiDir = Join-Path $root "api\dataservices"
 $logDir = Join-Path $root ".local-run"
 $dataFile = Join-Path $apiDir "data\local-couponleo-data.json"
 $snapshotWarmScript = Join-Path $apiDir "warm_couponleo_snapshot.py"
+$catalogSummaryScript = Join-Path $apiDir "generate_catalog_summaries.py"
 
 $python = (Get-Command python -ErrorAction Stop).Source
 $node = (Get-Command node -ErrorAction Stop).Source
@@ -22,29 +23,101 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 function Stop-ProjectProcessByPort {
   param(
     [int]$Port,
-    [string[]]$PathHints = @()
+    [string[]]$PathHints = @(),
+    [string[]]$FallbackProcessNames = @()
   )
 
-  $listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1
-  if (-not $listener) {
+  $listeners = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique
+  if (-not $listeners) {
     return
   }
 
-  $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)" -ErrorAction SilentlyContinue
-  $commandLine = if ($proc) { $proc.CommandLine } else { "" }
-  $matchesHint = $PathHints.Count -eq 0
+  $stoppedAny = $false
 
-  if (-not $matchesHint) {
-    foreach ($hint in $PathHints) {
-      if ($commandLine -like "*$hint*") {
-        $matchesHint = $true
-        break
+  foreach ($processId in $listeners) {
+    $proc = Get-Process -Id $processId -ErrorAction SilentlyContinue
+    if (-not $proc) {
+      continue
+    }
+
+    $commandLine = ""
+    $executablePath = $proc.Path
+    try {
+      $cimProc = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction Stop
+      $commandLine = $cimProc.CommandLine
+      if ($cimProc.ExecutablePath) {
+        $executablePath = $cimProc.ExecutablePath
       }
+    } catch {
+      # Fall back to exact-port process-name checks when command-line inspection is restricted.
+    }
+    $matchesHint = $PathHints.Count -eq 0
+
+    if (-not $matchesHint) {
+      foreach ($hint in $PathHints) {
+        if ($commandLine -like "*$hint*" -or $executablePath -like "*$hint*") {
+          $matchesHint = $true
+          break
+        }
+      }
+    }
+
+    if (-not $matchesHint) {
+      $normalizedProcessName = $proc.ProcessName.ToLowerInvariant()
+      $matchesHint = $FallbackProcessNames | Where-Object { $_.ToLowerInvariant() -eq $normalizedProcessName }
+      if (-not $matchesHint) {
+        continue
+      }
+    }
+
+    try {
+      Stop-Process -Id $processId -Force -ErrorAction Stop
+      $stoppedAny = $true
+    } catch {
+      Write-Warning "Could not stop listener process $processId on port $Port."
     }
   }
 
-  if ($proc -and $matchesHint) {
-    Stop-Process -Id $listener.OwningProcess -Force
+  if ($stoppedAny) {
+    Start-Sleep -Seconds 2
+  }
+}
+
+function Stop-ProjectProcessesByCommandLine {
+  param(
+    [string[]]$Contains = @()
+  )
+
+  if ($Contains.Count -eq 0) {
+    return
+  }
+
+  $processes = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    $commandLine = $_.CommandLine
+
+    if (-not $commandLine) {
+      return $false
+    }
+
+    foreach ($fragment in $Contains) {
+      if ($commandLine -like "*$fragment*") {
+        return $true
+      }
+    }
+
+    return $false
+  }
+
+  foreach ($proc in $processes) {
+    try {
+      Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
+    } catch {
+      Write-Warning "Could not stop existing process $($proc.ProcessId)."
+    }
+  }
+
+  if ($processes) {
     Start-Sleep -Seconds 2
   }
 }
@@ -67,19 +140,26 @@ function Wait-Url {
   return $false
 }
 
-Stop-ProjectProcessByPort -Port $UiPort -PathHints @("couponleo_ultimate\ui", "couponleonew_final\ui", "vite.js", "serve-local.mjs", "server/index.mjs")
-Stop-ProjectProcessByPort -Port $ApiPort -PathHints @("couponleo_ultimate\api", "couponleo.py", "flask --app couponleo")
+Stop-ProjectProcessByPort -Port $UiPort -PathHints @("couponleo_ultimate\ui", "couponleonew_final\ui", "vite.js", "serve-local.mjs", "server/index.mjs") -FallbackProcessNames @("node")
+Stop-ProjectProcessByPort -Port $ApiPort -PathHints @("couponleo_ultimate\api", "couponleo.py", "flask --app couponleo") -FallbackProcessNames @("python", "cmd")
+Stop-ProjectProcessesByCommandLine -Contains @(
+  "$uiDir\dist\analog\server\index.mjs",
+  "$uiDir\node_modules\vite",
+  "$uiDir"
+)
 
 $apiOut = Join-Path $logDir "api.out.log"
 $apiErr = Join-Path $logDir "api.err.log"
-$uiOut = Join-Path $logDir "ui.out.log"
-$uiErr = Join-Path $logDir "ui.err.log"
+$uiOut = Join-Path $logDir "ui-$UiPort.out.log"
+$uiErr = Join-Path $logDir "ui-$UiPort.err.log"
 $uiBuildOut = Join-Path $logDir "ui-build.out.log"
 $uiBuildErr = Join-Path $logDir "ui-build.err.log"
 $snapshotOut = Join-Path $logDir "snapshot.out.log"
 $snapshotErr = Join-Path $logDir "snapshot.err.log"
+$catalogSummaryOut = Join-Path $logDir "catalog-summaries.out.log"
+$catalogSummaryErr = Join-Path $logDir "catalog-summaries.err.log"
 
-Remove-Item $apiOut, $apiErr, $uiOut, $uiErr, $uiBuildOut, $uiBuildErr -Force -ErrorAction SilentlyContinue
+Remove-Item $apiOut, $apiErr, $uiOut, $uiErr, $uiBuildOut, $uiBuildErr, $catalogSummaryOut, $catalogSummaryErr -Force -ErrorAction SilentlyContinue
 
 if (-not (Test-Path $dataFile) -and (Test-Path $snapshotWarmScript)) {
   Write-Host "No local CouponLeo snapshot found. Warming cache from the public API..."
@@ -90,9 +170,24 @@ if (-not (Test-Path $dataFile) -and (Test-Path $snapshotWarmScript)) {
   }
 }
 
+if (Test-Path $catalogSummaryScript) {
+  Write-Host "Refreshing CouponLeo catalog summaries for sitemap and SSR..."
+  Push-Location $apiDir
+  try {
+    $env:COUPONLEO_DATA_FILE = $dataFile
+    & $python -B $catalogSummaryScript 1>> $catalogSummaryOut 2>> $catalogSummaryErr
+  } catch {
+    Write-Warning "Catalog summary refresh failed. Existing summary JSON files will be used. Check $catalogSummaryOut and $catalogSummaryErr."
+  } finally {
+    Remove-Item Env:COUPONLEO_DATA_FILE -ErrorAction SilentlyContinue
+    Pop-Location
+  }
+}
+
 $apiEnvSegments = @(
   "set COUPONLEO_API_PORT=$ApiPort",
   "set COUPONLEO_API_DEBUG=false",
+  "set COUPONLEO_TELEMETRY_ADMIN_KEY=couponleo-local-admin",
   "set ENABLE_MUTATIONS=true",
   "set ALLOWED_ORIGINS=http://127.0.0.1:$UiPort,http://localhost:$UiPort",
   "set ALLOWED_HOSTS=127.0.0.1,localhost",
@@ -144,14 +239,29 @@ $apiProc = Start-Process `
 Write-Host "Building CouponLeo UI SSR bundle..."
 Push-Location $uiDir
 try {
-  & $npm run build 1>> $uiBuildOut 2>> $uiBuildErr
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  & $npm run build *> $uiBuildOut
+  $buildExitCode = $LASTEXITCODE
 } finally {
+  $ErrorActionPreference = $previousErrorActionPreference
   Pop-Location
 }
 
+if ($buildExitCode -ne 0) {
+  throw "CouponLeo UI build failed. Check $uiBuildOut and $uiBuildErr."
+}
+
+$uiEnvSegments = @(
+  "set PORT=$UiPort",
+  "set NITRO_PORT=$UiPort",
+  "set HOST=127.0.0.1"
+)
+$uiCommand = ($uiEnvSegments -join "&&") + "&&cd /d $uiDir&&""$node"" dist\analog\server\index.mjs"
+
 $uiProc = Start-Process `
   -FilePath "C:\Windows\System32\cmd.exe" `
-  -ArgumentList "/c", "set PORT=$UiPort&&set HOST=127.0.0.1&&set NITRO_PORT=$UiPort&&set NITRO_HOST=127.0.0.1&&cd /d $uiDir\dist\analog&&""$node"" server/index.mjs" `
+  -ArgumentList "/c", $uiCommand `
   -WindowStyle Hidden `
   -RedirectStandardOutput $uiOut `
   -RedirectStandardError $uiErr `

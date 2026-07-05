@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import os
+import time
 import uuid
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from dotenv import load_dotenv
-from flask import Flask, abort, g, jsonify, request
+from flask import Flask, abort, g, jsonify, make_response, redirect, request
 from flask_compress import Compress
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -28,6 +30,7 @@ couponleoapi.wsgi_app = ProxyFix(
 Compress(couponleoapi)
 
 API_PREFIX = f"{Config.API_PREFIX}/"
+API_ROOT = Config.API_PREFIX.rstrip("/")
 ALLOWED_ORIGINS = {origin.strip() for origin in Config.ALLOWED_ORIGINS if origin.strip()}
 ALLOWED_HOSTS = {host.strip().lower() for host in Config.ALLOWED_HOSTS if host.strip()}
 ALLOWED_METHODS = "GET, HEAD, POST, PUT, DELETE, OPTIONS"
@@ -35,6 +38,10 @@ READ_ONLY_METHODS = {"GET", "HEAD", "OPTIONS"}
 MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 EXTENSION_ORIGIN_PREFIXES = ("chrome-extension://", "moz-extension://")
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+ALLOWED_LOGO_HOST_SUFFIXES = ("brandlogos.org", "brandreward.com", "cuelinks.com")
+LOGO_PROXY_TTL_SECONDS = max(600, int(os.getenv("COUPONLEO_LOGO_PROXY_TTL_SECONDS", "86400")))
+LOGO_PROXY_TIMEOUT_SECONDS = max(3, int(os.getenv("COUPONLEO_LOGO_PROXY_TIMEOUT_SECONDS", "8")))
+_logo_proxy_cache: dict[str, tuple[float, bytes, str]] = {}
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -47,6 +54,14 @@ def _env_flag(name: str, default: bool = False) -> bool:
 
 def _is_loopback_host(host: str) -> bool:
     return bool(host) and host in LOOPBACK_HOSTS
+
+
+def _is_allowed_logo_host(host: str) -> bool:
+    normalized_host = (host or "").strip().lower()
+    return any(
+        normalized_host == suffix or normalized_host.endswith(f".{suffix}")
+        for suffix in ALLOWED_LOGO_HOST_SUFFIXES
+    )
 
 
 def _newsletter_write_allowed(path: str) -> bool:
@@ -128,10 +143,10 @@ def enforce_request_policy():
     host = (request.headers.get("X-Forwarded-Host") or request.host or "").split(":")[0].strip().lower()
     g.request_id = request.headers.get("X-Request-Id") or uuid.uuid4().hex
 
-    if path in {"/", "/favicon.ico"}:
+    if path == "/favicon.ico":
         abort(403)
 
-    if not path.startswith(API_PREFIX):
+    if path not in {"/", API_ROOT} and not path.startswith(API_PREFIX):
         abort(403)
 
     if not _host_allowed(host):
@@ -195,13 +210,69 @@ def after_request_func(response):
     if telemetry_read_request:
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
-    elif request.method in {"GET", "HEAD"}:
+    elif request.method in {"GET", "HEAD"} and not response.headers.get("Cache-Control"):
         response.headers["Cache-Control"] = "public, max-age=120, stale-while-revalidate=600"
-    else:
+    elif request.method not in {"GET", "HEAD"}:
         response.headers["Cache-Control"] = "no-store"
     for header, value in Config.SECURITY_HEADERS.items():
         response.headers[header] = value
 
+    return response
+
+
+@couponleoapi.get(f"{Config.API_PREFIX}/assets/logo")
+def proxy_logo_asset():
+    target_url = (request.args.get("url") or "").strip()
+
+    if not target_url:
+        abort(400, description="A logo url query parameter is required.")
+
+    parsed = urlparse(target_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        abort(400, description="A valid http or https logo url is required.")
+
+    if not _is_allowed_logo_host(parsed.hostname or ""):
+        abort(403, description="Logo host not allowed.")
+
+    cached_payload = _logo_proxy_cache.get(target_url)
+    now = time.time()
+    if cached_payload and cached_payload[0] > now:
+        _, payload, content_type = cached_payload
+        response = make_response(payload)
+        response.headers["Content-Type"] = content_type
+        response.headers["Cache-Control"] = f"public, max-age={LOGO_PROXY_TTL_SECONDS}, stale-while-revalidate=604800"
+        response.headers["X-Logo-Proxy-Cache"] = "HIT"
+        return response
+
+    request_headers = {
+        "User-Agent": "CouponLeoLogoProxy/1.0",
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    }
+
+    try:
+        upstream_request = Request(target_url, headers=request_headers)
+        with urlopen(upstream_request, timeout=LOGO_PROXY_TIMEOUT_SECONDS) as upstream_response:
+            payload = upstream_response.read()
+            content_type = upstream_response.headers.get_content_type() or "image/png"
+    except Exception:
+        abort(502, description="Unable to fetch the requested logo.")
+
+    if not payload:
+        abort(502, description="The requested logo response was empty.")
+
+    _logo_proxy_cache[target_url] = (now + LOGO_PROXY_TTL_SECONDS, payload, content_type)
+    if len(_logo_proxy_cache) > 1024:
+        expired_keys = [
+            cache_key for cache_key, (expires_at, _, _) in _logo_proxy_cache.items()
+            if expires_at <= now
+        ]
+        for cache_key in expired_keys[:256]:
+            _logo_proxy_cache.pop(cache_key, None)
+
+    response = make_response(payload)
+    response.headers["Content-Type"] = content_type
+    response.headers["Cache-Control"] = f"public, max-age={LOGO_PROXY_TTL_SECONDS}, stale-while-revalidate=604800"
+    response.headers["X-Logo-Proxy-Cache"] = "MISS"
     return response
 
 
@@ -255,6 +326,13 @@ def health_check():
     )
 
 
+@couponleoapi.route("/", methods=["GET"])
+def api_root_redirect():
+    return redirect(API_ROOT, code=302)
+
+
+@couponleoapi.route(API_ROOT, methods=["GET"])
+@couponleoapi.route(f"{API_ROOT}/", methods=["GET"])
 @couponleoapi.route(f"{Config.API_PREFIX}/docs", methods=["GET"])
 def api_docs():
     return jsonify(

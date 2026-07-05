@@ -15,6 +15,11 @@ import { CouponleoAuthService } from './couponleo-auth.service';
 import { CouponleoLocaleService } from './couponleo-locale.service';
 import { createLoadingState, withRequestState } from './couponleo-request-state.helpers';
 import {
+  buildCouponleoCategoryCardDescription,
+  buildCouponleoStoreCardDescription,
+  resolveCouponleoLocationSpotlight,
+} from './couponleo-seo-copy.helpers';
+import {
   buildCategoryRoute,
   buildStoreRoute,
   formatCount,
@@ -197,7 +202,7 @@ function buildStoreCard(store: CouponleoStore) {
       ? translateCouponleoPhrase(locale, 'Featured store')
       : translateCouponleoPhrase(locale, 'Store'),
     title: store.name,
-    copy: truncate(store.headline || `${store.category} store with ${formatCount(store.activeCoupons, 'live offer', 'live offers')}.`, 145),
+    copy: truncate(buildCouponleoStoreCardDescription(store), 145),
     meta: `${store.location || translateCouponleoPhrase(locale, 'Global coverage')} | ${formatCount(store.activeCoupons, 'live offer', 'live offers')}`,
     href: buildStoreRoute(store.slug),
     cta: translateCouponleoPhrase(locale, 'Open store'),
@@ -212,7 +217,7 @@ function buildCategoryCard(category: CouponleoCategory) {
   return {
     badge: translateCouponleoPhrase(locale, 'Live category'),
     title: category.name,
-    copy: truncate(category.headline || `${formatCount(category.couponCount, 'live offer', 'live offers')} are active in this category.`, 145),
+    copy: truncate(buildCouponleoCategoryCardDescription(category), 145),
     meta: `${formatCount(category.couponCount, 'live offer', 'live offers')}${category.storeCount ? ` | ${formatCount(category.storeCount, 'store', 'stores')}` : ''}`,
     href: buildCategoryRoute(category.slug),
     cta: translateCouponleoPhrase(locale, 'Open category'),
@@ -321,7 +326,7 @@ export class CouponleoPageContentService {
     return {
       eyebrow: 'My Coupons',
       title: 'Keep your live coupon shortlist ready for the next checkout.',
-      description: 'This page now reflects saved offers first, then fills any gaps with the strongest live CouponLeo picks so the route always stays useful.',
+      description: 'This page keeps your saved offers close at hand, then fills the gaps with strong live picks so your shortlist still feels useful.',
       navLinks: withActiveMemberLink('/my-coupons'),
       actions: [
         { href: '/wishlist', label: 'Open Wishlist' },
@@ -336,18 +341,18 @@ export class CouponleoPageContentService {
         {
           eyebrow: 'Ready Now',
           title: 'Coupons closest to real use',
-          copy: 'These cards come from saved offers first. If the shortlist is still thin, the page adds live featured coupons so the route never goes empty.',
+          copy: 'Saved offers appear first here, and if that list is still light, CouponLeo brings in strong live picks so you still have somewhere sensible to start.',
           columns: 3,
           cards: readyCards,
         },
         {
           eyebrow: 'Keep Momentum',
-          title: 'Best follow-up stores from the live catalog',
+          title: 'Stores worth opening next',
           columns: 2,
           cards: spotlightStores.length > 0 ? spotlightStores : this.topCategories().slice(0, 2).map(buildCategoryCard),
         },
       ],
-      footnote: `${formatCount(this.siteSummary().totalCoupons, 'live offer', 'live offers')} are available across ${formatCount(this.siteSummary().totalStores, 'store', 'stores')} right now, so this route can stay connected to real catalog depth instead of mock history.`,
+      footnote: `${formatCount(this.siteSummary().totalCoupons, 'live offer', 'live offers')} are currently spread across ${formatCount(this.siteSummary().totalStores, 'store', 'stores')}, so the page can stay grounded in real shopping activity.`,
     };
   });
 
@@ -356,7 +361,7 @@ export class CouponleoPageContentService {
     const marketCards = this.markets().slice(0, 2).map((market) => ({
       badge: 'Market watch',
       title: market.name,
-      copy: truncate(market.spotlight || `${formatCount(market.couponCount ?? 0, 'live offer', 'live offers')} are active in this market.`, 145),
+      copy: truncate(resolveCouponleoLocationSpotlight(market), 145),
       meta: `${formatCount(market.couponCount ?? 0, 'live offer', 'live offers')}${market.storeCount ? ` • ${formatCount(market.storeCount, 'store', 'stores')}` : ''}`,
       href: `/country-deals?country=${encodeURIComponent(market.name)}`,
       cta: 'Open market',
@@ -366,7 +371,7 @@ export class CouponleoPageContentService {
     return {
       eyebrow: 'Alerts',
       title: 'Stay ahead of coupon drops, price moves, and expiring offers.',
-      description: 'Alerts now reflects real time-sensitive catalog data: expiring featured coupons, strong markets, and the saved routes that deserve follow-up.',
+      description: 'Alerts keeps the time-sensitive part of CouponLeo in view: expiring offers, strong markets, and the saved places worth checking again.',
       navLinks: withActiveMemberLink('/alerts'),
       actions: [
         { href: '/top-deals', label: 'Find deals to watch' },
@@ -391,7 +396,7 @@ export class CouponleoPageContentService {
           cards: marketCards,
         },
       ],
-      footnote: 'Alerts is no longer a placeholder shell. It now uses actual CouponLeo catalog pressure points so the route can support real follow-up work.',
+      footnote: 'Alerts now leans on the parts of the catalog that actually create urgency, so the page feels more useful when timing matters.',
     };
   });
 
@@ -554,21 +559,21 @@ export class CouponleoPageContentService {
   readonly helpCenterPageConfig = computed<CouponleoThemedPageConfig>(() => ({
     eyebrow: 'Help Center',
     title: 'How can we help with CouponLeo?',
-    description: 'Get quick answers on accounts, saved items, browsing routes, and the policy pages linked from the footer.',
+    description: 'Find quick help for sign-in, saved items, shopping discovery, and the pages that explain how CouponLeo works.',
     heroTone: 'soft',
     layout: 'help',
     sections: [
       {
         eyebrow: 'Common questions',
-        title: 'Start with the question type',
-        copy: 'These are the most common paths for shoppers who need help with the current CouponLeo experience.',
+        title: 'Start with what you need help with',
+        copy: 'These are the most common starting points for shoppers using CouponLeo.',
         variant: 'list',
         columns: 2,
         cards: [
           {
             badge: 'Account',
-            title: 'Sign in, session access, and account troubleshooting',
-            copy: 'Use sign-in or settings when the issue is access, an expired session, or a member trying to resume their workspace.',
+            title: 'Sign-in help and account access',
+            copy: 'Start here if you cannot sign in, lost your session, or need to get back to your saved CouponLeo tools.',
             meta: this.session() ? `${this.session()?.email ?? 'Member'} is signed in right now` : 'Guest mode is active until the shopper signs in',
             href: '/sign-in',
             cta: 'Open sign in',
@@ -576,8 +581,8 @@ export class CouponleoPageContentService {
           },
           {
             badge: 'Wishlist',
-            title: 'Saved items and follow-up research',
-            copy: 'Use Wishlist when someone wants to return to shortlisted stores, categories, or coupons without starting over.',
+            title: 'Saved items and follow-up shopping',
+            copy: 'Open Wishlist when you want to return to saved stores, categories, or offers without starting over.',
             meta: `${formatValue(this.savedCount())} saved items are available in this browser workspace`,
             href: '/wishlist',
             cta: 'Open wishlist',
@@ -585,8 +590,8 @@ export class CouponleoPageContentService {
           },
           {
             badge: 'Catalog',
-            title: 'Finding stores, categories, and live offers',
-            copy: 'Point shoppers to the public catalog when they need discovery help rather than account support.',
+            title: 'Finding the right store, category, or deal',
+            copy: 'Browse the public catalog when the question is less about your account and more about where to start shopping.',
             meta: `${formatCount(this.siteSummary().totalStores, 'store', 'stores')} and ${formatCount(this.topCategories().length, 'category', 'categories')} are already available`,
             href: '/stores',
             cta: 'Browse stores',
@@ -594,8 +599,8 @@ export class CouponleoPageContentService {
           },
           {
             badge: 'Alerts',
-            title: 'Coupon timing, alerts, and expiring offers',
-            copy: 'Open Alerts when the question is about time-sensitive coupons, deal monitoring, or whether a shopper can keep watching an offer.',
+            title: 'Watching expiring offers and deal timing',
+            copy: 'Use Alerts when you want to keep track of fast-moving offers or check whether a deal is still worth revisiting.',
             meta: `${formatValue(this.expiringCoupons().slice(0, 4).length)} urgent featured offers are surfaced right now`,
             href: '/alerts',
             cta: 'Open alerts',
@@ -604,16 +609,16 @@ export class CouponleoPageContentService {
         ],
       },
       {
-        eyebrow: 'Browse by page',
-        title: 'Go straight to the right route',
-        copy: 'Use these page-level routes when the shopper already knows where they want to go next.',
+        eyebrow: 'Quick links',
+        title: 'Popular places shoppers go next',
+        copy: 'If you already know what you want to do, these links get you there faster.',
         variant: 'list',
         columns: 2,
         cards: [
           {
             badge: 'Stores',
-            title: 'Merchant directory',
-            copy: 'Best for shoppers who already know the brand and want the fastest route to current offer coverage.',
+            title: 'Browse stores',
+            copy: 'Best when you know the brand and want to check today\'s live savings in one place.',
             meta: `${formatCount(this.siteSummary().totalStores, 'store', 'stores')} are searchable today`,
             href: '/stores',
             cta: 'Browse stores',
@@ -621,8 +626,8 @@ export class CouponleoPageContentService {
           },
           {
             badge: 'Categories',
-            title: 'Category pages',
-            copy: 'Use categories when the shopper knows the purchase intent but has not chosen a merchant yet.',
+            title: 'Explore categories',
+            copy: 'Useful when you know what you want to buy but still want to compare more than one store.',
             meta: `${formatCount(this.topCategories().length, 'active category', 'active categories')} are surfaced here`,
             href: '/categories',
             cta: 'Browse categories',
@@ -630,8 +635,8 @@ export class CouponleoPageContentService {
           },
           {
             badge: 'Markets',
-            title: 'Country-specific deal pages',
-            copy: 'Use Country Deals when offer availability or pricing context depends on a specific market.',
+            title: 'Shop by country',
+            copy: 'Helpful when prices, delivery, or promo rules change from one market to another.',
             meta: `${formatCount(this.siteSummary().liveMarkets, 'market', 'markets')} supported`,
             href: '/country-deals',
             cta: 'Open country deals',
@@ -639,8 +644,8 @@ export class CouponleoPageContentService {
           },
           {
             badge: 'Coupons',
-            title: 'Saved coupons and member activity',
-            copy: 'My Coupons is the best route when a member wants to review what they saved or revisit tracked offers.',
+            title: 'Review saved coupons',
+            copy: 'A good next stop when you want to pick up where you left off with saved offers.',
             meta: `${formatValue(this.savedCount())} saved actions can already be carried into this flow`,
             href: '/my-coupons',
             cta: 'Open my coupons',
@@ -650,15 +655,15 @@ export class CouponleoPageContentService {
       },
       {
         eyebrow: 'Policies and contact',
-        title: 'Privacy, terms, and direct support',
-        copy: 'Use these routes when the question is about policy, trust, or a direct support reply.',
+        title: 'Policies, privacy, and direct support',
+        copy: 'Use these when the question is about trust, data handling, or you need to contact the team directly.',
         variant: 'list',
         columns: 2,
         cards: [
           {
             badge: 'Privacy',
             title: 'Privacy Policy',
-            copy: 'Explains how CouponLeo currently handles session state, saved items, locale preferences, and support-related data.',
+            copy: 'See how CouponLeo handles saved items, account state, locale preferences, and related product data.',
             href: '/privacy-policy',
             cta: 'Read privacy policy',
             tone: 'sand',
@@ -666,7 +671,7 @@ export class CouponleoPageContentService {
           {
             badge: 'Terms',
             title: 'Terms of Use',
-            copy: 'Covers responsible use, merchant redirects, member responsibilities, and what stays under the merchant checkout flow.',
+            copy: 'Read the ground rules for using CouponLeo and understand where merchant terms take over at checkout.',
             href: '/terms-of-use',
             cta: 'Read terms of use',
             tone: 'navy',
@@ -674,15 +679,15 @@ export class CouponleoPageContentService {
           {
             badge: 'Contact',
             title: 'Reach support directly',
-            copy: 'Use the contact route when the issue is account-specific, privacy-sensitive, or needs a direct reply from the team.',
+            copy: 'Use Contact when the issue needs a direct reply, involves account details, or relates to partnerships and business requests.',
             href: '/contact',
             cta: 'Contact support',
             tone: 'blue',
           },
           {
             badge: 'Wishlist',
-            title: 'Open wishlist directly',
-            copy: 'Return to saved items immediately when the shopper already knows they want to continue from their saved list.',
+            title: 'Go back to Wishlist',
+            copy: 'Jump back into saved items when you already know what you want to revisit.',
             href: '/wishlist',
             cta: 'Open wishlist',
             tone: 'orange',

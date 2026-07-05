@@ -367,6 +367,12 @@ button {
   line-height: 1.7;
 }
 
+.couponleo-hero__support {
+  max-width: 34rem;
+  margin-top: -6px;
+  font-size: 1rem;
+}
+
 .couponleo-hero__underline {
   width: 150px;
   height: 10px;
@@ -476,6 +482,39 @@ button {
   height: 1.2rem;
 }
 
+.couponleo-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.couponleo-hero__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.couponleo-hero__summary-card {
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 16px 32px rgba(18, 35, 77, 0.06);
+}
+
+.couponleo-hero__summary-card strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--couponleo-navy);
+  font-size: 1.32rem;
+}
+
+.couponleo-hero__summary-card span {
+  color: var(--couponleo-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 .couponleo-hero__benefits {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -505,6 +544,58 @@ button {
   box-shadow: 0 12px 30px rgba(18, 35, 77, 0.05);
 }
 
+.couponleo-copy-section {
+  display: grid;
+  gap: 22px;
+}
+
+.couponleo-copy-grid--home {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.couponleo-copy-card {
+  display: grid;
+  gap: 14px;
+}
+
+.couponleo-copy-card--wide {
+  gap: 12px;
+  padding: 22px 24px;
+}
+
+.couponleo-copy-card__links {
+  display: grid;
+  gap: 10px;
+}
+
+.couponleo-copy-link {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(22, 36, 74, 0.03);
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.couponleo-copy-link:hover {
+  background: rgba(52, 120, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.couponleo-copy-link strong {
+  margin: 0;
+  color: var(--couponleo-navy);
+  font-size: 0.96rem;
+}
+
+.couponleo-copy-link span {
+  color: var(--couponleo-muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
 .couponleo-hero__benefits strong,
 .couponleo-stat-band strong,
 .couponleo-newsletter__copy h3,
@@ -525,6 +616,10 @@ button {
   isolation: isolate;
   min-height: 38rem;
   overflow: visible;
+}
+
+.couponleo-hero__visual--home {
+  min-height: 33rem;
 }
 
 .couponleo-hero__visual::before {
@@ -596,6 +691,52 @@ button {
   filter: blur(16px);
 }
 
+.couponleo-hero__snapshot-card {
+  position: absolute;
+  top: 6%;
+  left: 4%;
+  z-index: 3;
+  display: grid;
+  gap: 12px;
+  width: min(320px, 54%);
+  padding: 20px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.96);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 184, 90, 0.16), transparent 38%),
+    rgba(255, 255, 255, 0.94);
+  box-shadow: 0 22px 48px rgba(18, 35, 77, 0.12);
+}
+
+.couponleo-eyebrow--soft {
+  background: rgba(52, 120, 255, 0.08);
+  color: var(--couponleo-blue);
+}
+
+.couponleo-hero__snapshot-card strong {
+  color: var(--couponleo-navy);
+  font-size: 1.48rem;
+  line-height: 1.18;
+  letter-spacing: -0.04em;
+}
+
+.couponleo-hero__snapshot-card p {
+  font-size: 0.96rem;
+  line-height: 1.7;
+}
+
+.couponleo-hero__snapshot-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.couponleo-hero__snapshot-links a {
+  color: var(--couponleo-blue);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
 .couponleo-hero__image {
   position: absolute;
   right: -2%;
@@ -612,6 +753,38 @@ button {
     drop-shadow(0 20px 32px rgba(255, 160, 78, 0.16));
   transform: translateX(0) scale(1.01);
   pointer-events: none;
+}
+
+.couponleo-hero__image--home {
+  right: -4%;
+  bottom: -3%;
+  width: min(100%, 34rem);
+}
+
+.couponleo-hero__market-pill {
+  position: absolute;
+  right: 13%;
+  bottom: 10%;
+  z-index: 3;
+  display: grid;
+  gap: 4px;
+  min-width: 210px;
+  padding: 14px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.96);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 38px rgba(18, 35, 77, 0.09);
+}
+
+.couponleo-hero__market-pill strong {
+  color: var(--couponleo-navy);
+  font-size: 1rem;
+}
+
+.couponleo-hero__market-pill span {
+  color: var(--couponleo-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
 }
 
 .couponleo-hero__cart-badge {
@@ -715,6 +888,18 @@ button {
 .couponleo-section-heading a {
   color: var(--couponleo-blue);
   font-weight: 800;
+}
+
+.couponleo-section-heading--stacked {
+  display: grid;
+  justify-content: start;
+}
+
+.couponleo-section-heading--stacked p {
+  margin: 0;
+  max-width: 56rem;
+  color: var(--couponleo-muted);
+  line-height: 1.8;
 }
 
 .couponleo-filter-bar {
@@ -892,6 +1077,22 @@ button {
   word-break: break-word;
 }
 
+.couponleo-store-name-link {
+  color: inherit;
+  text-decoration: none;
+  transition: color 160ms ease, opacity 160ms ease;
+}
+
+.couponleo-store-name-link:hover {
+  color: var(--couponleo-blue);
+}
+
+.couponleo-store-name-link:focus-visible {
+  outline: 2px solid rgba(76, 119, 255, 0.4);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
 .couponleo-deal-card__brand-group {
   display: inline-flex;
   align-items: center;
@@ -1037,6 +1238,12 @@ button.couponleo-code {
   font-size: 0.92rem;
 }
 
+.couponleo-orb-card__summary {
+  color: var(--couponleo-muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
 .couponleo-orb-card__icon {
   display: inline-flex;
   align-items: center;
@@ -1056,25 +1263,30 @@ button.couponleo-code {
 
 .couponleo-store-row {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
 .couponleo-store-pill {
   position: relative;
-  display: grid;
-  justify-items: center;
-  gap: 10px;
+  display: block;
   min-width: 0;
-  min-height: 132px;
-  padding: 18px 16px;
+  min-height: 100%;
+  padding: 18px 16px 16px;
   border: 1px solid rgba(255, 255, 255, 0.94);
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.86);
   box-shadow: 0 14px 36px rgba(18, 35, 77, 0.06);
   color: var(--couponleo-navy);
-  font-weight: 800;
+}
+
+.couponleo-store-pill__body {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  color: inherit;
   text-align: center;
+  text-decoration: none;
 }
 
 .couponleo-store-pill__link {
@@ -1083,10 +1295,26 @@ button.couponleo-code {
   font-weight: 800;
 }
 
+.couponleo-store-pill__meta,
+.couponleo-store-pill__summary {
+  color: var(--couponleo-muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.couponleo-store-pill__summary {
+  display: -webkit-box;
+  min-height: calc(1.55em * 3);
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
 .couponleo-store-pill__favorite {
   position: absolute;
   top: 14px;
   right: 14px;
+  z-index: 2;
 }
 
 .couponleo-store-pill__icon {
@@ -1108,6 +1336,7 @@ button.couponleo-code {
 }
 
 .couponleo-store-pill__name {
+  font-weight: 800;
   overflow-wrap: anywhere;
 }
 
@@ -1725,6 +1954,7 @@ button.couponleo-code {
     gap: 16px;
   }
 
+  .couponleo-hero__summary,
   .couponleo-hero__benefits,
   .couponleo-newsletter__form {
     grid-template-columns: 1fr;
@@ -1744,6 +1974,14 @@ button.couponleo-code {
 
   .couponleo-hero__visual {
     min-height: 28rem;
+  }
+
+  .couponleo-hero__visual--home {
+    min-height: 30rem;
+  }
+
+  .couponleo-copy-grid--home {
+    grid-template-columns: 1fr;
   }
 
   .couponleo-filter-bar {
@@ -1852,6 +2090,10 @@ button.couponleo-code {
     min-height: 26rem;
   }
 
+  .couponleo-hero__visual--home {
+    min-height: 28rem;
+  }
+
   .couponleo-brand__image-shell {
     width: 180px;
   }
@@ -1876,9 +2118,30 @@ button.couponleo-code {
     width: min(100%, 31rem);
   }
 
+  .couponleo-hero__image--home {
+    right: -2%;
+    bottom: -2%;
+    width: min(100%, 28rem);
+  }
+
   .couponleo-hero__cart-badge {
     right: 2%;
     bottom: 20%;
+  }
+
+  .couponleo-hero__snapshot-card {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+    margin-bottom: 12px;
+  }
+
+  .couponleo-hero__market-pill {
+    right: 8%;
+    bottom: 8%;
+    min-width: 0;
+    max-width: 220px;
   }
 
   .couponleo-page-loader__grid,

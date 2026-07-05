@@ -23,6 +23,13 @@ export interface CouponleoLocaleOption {
   value: string;
 }
 
+interface CouponleoRequestLike {
+  originalUrl?: string;
+  path?: string;
+  raw?: { url?: string };
+  url?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CouponleoLocaleService {
   private readonly platformId = inject(PLATFORM_ID);
@@ -48,27 +55,23 @@ export class CouponleoLocaleService {
     const browserLocale = this.browser ? window.navigator.language : COUPONLEO_DEFAULT_LOCALE;
     this.localeState.set(this.normalizeLocale(urlLocale ?? storedLocale ?? browserLocale));
 
-    if (this.browser) {
-      this.router.events
-        .pipe(filter((event) => event instanceof NavigationEnd))
-        .subscribe(() => {
-          const explicitLocale = this.currentLocaleFromUrl();
+    this.router.events
+      .pipe(filter((event) => event instanceof NavigationEnd))
+      .subscribe(() => {
+        this.syncLocaleFromCurrentUrl({ persist: this.browser });
 
-          if (explicitLocale) {
-            const normalizedLocale = this.normalizeLocale(explicitLocale);
-
-            if (normalizedLocale !== this.localeState()) {
-              this.localeState.set(normalizedLocale);
-            }
-
-            this.persistLocale(normalizedLocale);
-          }
-
+        if (this.browser) {
           this.syncBrowserUrl();
-        });
+        }
+      });
 
-      queueMicrotask(() => this.syncBrowserUrl());
-    }
+    queueMicrotask(() => {
+      this.syncLocaleFromCurrentUrl({ persist: this.browser });
+
+      if (this.browser) {
+        this.syncBrowserUrl();
+      }
+    });
   }
 
   setLocale(locale: string): void {
@@ -118,9 +121,20 @@ export class CouponleoLocaleService {
       : 'https://couponleo.com';
     const requestUrl = this.browser
       ? (this.router.url || '/')
-      : (this.request?.url || this.router.url || '/');
+      : this.resolveServerRequestUrl();
 
     return new URL(requestUrl, baseUrl);
+  }
+
+  private resolveServerRequestUrl(): string {
+    const request = this.request as CouponleoRequestLike | null;
+
+    return request?.originalUrl
+      || request?.url
+      || request?.path
+      || request?.raw?.url
+      || this.router.url
+      || '/';
   }
 
   private navigateToLocalizedUrl(locale: CouponleoSupportedLocale): void {
@@ -150,6 +164,24 @@ export class CouponleoLocaleService {
     }
 
     window.localStorage.setItem(COUPONLEO_LOCALE_STORAGE_KEY, locale);
+  }
+
+  private syncLocaleFromCurrentUrl(options?: { persist?: boolean }): void {
+    const explicitLocale = this.currentLocaleFromUrl();
+
+    if (!explicitLocale) {
+      return;
+    }
+
+    const normalizedLocale = this.normalizeLocale(explicitLocale);
+
+    if (normalizedLocale !== this.localeState()) {
+      this.localeState.set(normalizedLocale);
+    }
+
+    if (options?.persist) {
+      this.persistLocale(normalizedLocale);
+    }
   }
 
   private syncBrowserUrl(): void {

@@ -3,10 +3,11 @@ import { RouterLink } from '@angular/router';
 import { CouponleoPageContentService } from '../services/couponleo-page-content.service';
 import { CouponleoI18nService } from '../services/couponleo-i18n.service';
 import { createStaticRouteMeta } from '../services/couponleo-route-meta';
+import { localizeCouponleoRoute } from '../services/couponleo-ui.helpers';
 
 export const routeMeta = createStaticRouteMeta({
   title: 'About CouponLeo',
-  description: 'Learn how CouponLeo turns a messy coupon catalog into a clearer journey across stores, categories, and verified deals.',
+  description: 'Learn how CouponLeo helps shoppers compare stores, categories, and live deals with less clutter and better context.',
 });
 
 @Component({
@@ -68,8 +69,20 @@ export const routeMeta = createStaticRouteMeta({
         </div>
 
         <div class="couponleo-about-story__actions">
-          <a class="couponleo-button couponleo-button--solid" routerLink="/top-deals" queryParamsHandling="preserve">{{ i18n.t('about.browseTopDeals') }}</a>
-          <a class="couponleo-button couponleo-button--ghost" routerLink="/contact" queryParamsHandling="preserve">{{ i18n.t('common.contactTeam') }}</a>
+          <a
+            class="couponleo-button couponleo-button--solid"
+            [routerLink]="localizeRoute('/top-deals')"
+            queryParamsHandling="preserve"
+            data-telemetry-event="about_browse_top_deals"
+            [attr.data-telemetry-label]="i18n.t('about.browseTopDeals')"
+          >{{ i18n.t('about.browseTopDeals') }}</a>
+          <a
+            class="couponleo-button couponleo-button--ghost"
+            [routerLink]="localizeRoute('/contact')"
+            queryParamsHandling="preserve"
+            data-telemetry-event="about_contact_team"
+            [attr.data-telemetry-label]="i18n.t('common.contactTeam')"
+          >{{ i18n.t('common.contactTeam') }}</a>
         </div>
       </div>
     </section>
@@ -141,4 +154,8 @@ export const routeMeta = createStaticRouteMeta({
 export default class AboutPage {
   protected readonly content = inject(CouponleoPageContentService);
   protected readonly i18n = inject(CouponleoI18nService);
+
+  protected localizeRoute(path: string): string {
+    return localizeCouponleoRoute(path, this.i18n.locale());
+  }
 }

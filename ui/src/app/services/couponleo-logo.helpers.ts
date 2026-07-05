@@ -6,6 +6,12 @@ export const COUPONLEO_ALLOWED_LOGO_HOST_SUFFIXES = [
   'cuelinks.com',
 ] as const;
 
+const COUPONLEO_LOGO_PROXY_PATH = '/couponleo/api/assets/logo';
+
+function couponleoLogoProxyBaseUrl(): string {
+  return COUPONLEO_LOGO_PROXY_PATH;
+}
+
 export function couponleoStoreLogoUrl(store: Pick<CouponleoStore, 'logo_square_url' | 'logoUrl' | 'logo_horizontal_url' | 'image_url'>): string {
   return store.logo_square_url ?? store.logoUrl ?? store.logo_horizontal_url ?? store.image_url ?? '';
 }
@@ -72,9 +78,21 @@ export function proxiedCouponleoLogoUrl(url: string): string {
     return '';
   }
 
+  if (url.startsWith('/')) {
+    return url;
+  }
+
   try {
     const parsed = new URL(url);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : '';
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return '';
+    }
+
+    if (isAllowedCouponleoLogoHost(parsed.hostname)) {
+      return `${couponleoLogoProxyBaseUrl()}?url=${encodeURIComponent(parsed.toString())}`;
+    }
+
+    return parsed.toString();
   } catch {
     return isAllowedCouponleoLogoUrl(url) ? url : '';
   }

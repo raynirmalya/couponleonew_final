@@ -18,6 +18,23 @@ const BUILD_DATE = new Date().toISOString().slice(0, 10);
 const CATEGORY_MIN_COUPON_COUNT = 25;
 const CATEGORY_MIN_STORE_COUNT = 5;
 const STORE_SITEMAP_CHUNK_SIZE = 5000;
+const LOCALIZED_STORE_SITEMAP_CHUNK_SIZE = 45000;
+const COUNTRY_FILTERED_DIRECTORY_ROUTES = [
+  { pathname: '/categories', changefreq: 'daily', priority: '0.84' },
+  { pathname: '/stores', changefreq: 'daily', priority: '0.87' },
+  { pathname: '/top-deals', changefreq: 'daily', priority: '0.89' },
+];
+const NON_DEFAULT_LOCALES = [
+  { locale: 'de-DE', segment: 'de' },
+  { locale: 'fr-FR', segment: 'fr' },
+  { locale: 'es-ES', segment: 'es' },
+  { locale: 'it-IT', segment: 'it' },
+  { locale: 'pt-BR', segment: 'pt' },
+  { locale: 'nl-NL', segment: 'nl' },
+  { locale: 'hi-IN', segment: 'hi' },
+  { locale: 'ja-JP', segment: 'ja' },
+  { locale: 'ar-SA', segment: 'ar' },
+];
 const EXCLUDED_CATEGORY_SLUGS = new Set([
   'coupons',
   'deals',
@@ -112,7 +129,6 @@ function shouldIncludeCategory(category) {
 function shouldIncludeLocation(location) {
   return Boolean(String(location?.name ?? '').trim()) && Number(location?.couponCount ?? 0) > 0;
 }
-
 function buildUrlSetXml(entries) {
   const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'];
 
@@ -175,6 +191,13 @@ function chunkEntries(entries, chunkSize) {
   return chunks;
 }
 
+function localizedPathname(pathname, localeSegment) {
+  const normalizedPathname = pathname === '/' ? '/' : pathname.replace(/\/+$/, '');
+  return normalizedPathname === '/'
+    ? `/${localeSegment}`
+    : `/${localeSegment}${normalizedPathname}`;
+}
+
 function cleanupStaleSitemaps(expectedFilenames) {
   if (!existsSync(sitemapDirectory)) {
     return;
@@ -198,15 +221,29 @@ const staticEntries = new Map();
 const countryEntries = new Map();
 const categoryEntries = new Map();
 const storeEntries = new Map();
+const localizedStaticEntries = new Map();
+const localizedCountryEntries = new Map();
+const localizedCategoryEntries = new Map();
+const localizedStoreEntries = new Map();
 
 let staticCount = 0;
 let storeCount = 0;
 let categoryCount = 0;
-let locationCount = 0;
+let countryLandingCount = 0;
+let localizedStaticCount = 0;
+let localizedStoreCount = 0;
+let localizedCategoryCount = 0;
+let localizedCountryLandingCount = 0;
 
 for (const route of STATIC_ROUTES) {
   if (addEntry(staticEntries, route.pathname, route)) {
     staticCount += 1;
+  }
+
+  for (const locale of NON_DEFAULT_LOCALES) {
+    if (addEntry(localizedStaticEntries, localizedPathname(route.pathname, locale.segment), route)) {
+      localizedStaticCount += 1;
+    }
   }
 }
 
@@ -220,7 +257,37 @@ for (const location of locations) {
     changefreq: 'daily',
     priority: '0.80',
   })) {
-    locationCount += 1;
+    countryLandingCount += 1;
+  }
+
+  for (const locale of NON_DEFAULT_LOCALES) {
+    if (addEntry(localizedCountryEntries, localizedPathname('/country-deals', locale.segment), {
+      query: { country: String(location.name).trim() },
+      changefreq: 'daily',
+      priority: '0.80',
+    })) {
+      localizedCountryLandingCount += 1;
+    }
+  }
+
+  for (const route of COUNTRY_FILTERED_DIRECTORY_ROUTES) {
+    if (addEntry(countryEntries, route.pathname, {
+      query: { country: String(location.name).trim() },
+      changefreq: route.changefreq,
+      priority: route.priority,
+    })) {
+      countryLandingCount += 1;
+    }
+
+    for (const locale of NON_DEFAULT_LOCALES) {
+      if (addEntry(localizedCountryEntries, localizedPathname(route.pathname, locale.segment), {
+        query: { country: String(location.name).trim() },
+        changefreq: route.changefreq,
+        priority: route.priority,
+      })) {
+        localizedCountryLandingCount += 1;
+      }
+    }
   }
 }
 
@@ -235,6 +302,15 @@ for (const category of categories) {
   })) {
     categoryCount += 1;
   }
+
+  for (const locale of NON_DEFAULT_LOCALES) {
+    if (addEntry(localizedCategoryEntries, localizedPathname(`/categories/${encodeURIComponent(cleanSlug(category.slug))}`, locale.segment), {
+      changefreq: 'daily',
+      priority: '0.78',
+    })) {
+      localizedCategoryCount += 1;
+    }
+  }
 }
 
 for (const store of stores) {
@@ -248,18 +324,38 @@ for (const store of stores) {
   })) {
     storeCount += 1;
   }
+
+  for (const locale of NON_DEFAULT_LOCALES) {
+    if (addEntry(localizedStoreEntries, localizedPathname(`/stores/${encodeURIComponent(cleanSlug(store.slug))}`, locale.segment), {
+      changefreq: 'daily',
+      priority: '0.64',
+    })) {
+      localizedStoreCount += 1;
+    }
+  }
 }
 
 const sitemapFiles = [
   { filename: 'static.xml', entries: [...staticEntries.values()] },
   { filename: 'countries.xml', entries: [...countryEntries.values()] },
   { filename: 'categories.xml', entries: [...categoryEntries.values()] },
+  { filename: 'locales-static.xml', entries: [...localizedStaticEntries.values()] },
+  { filename: 'locales-countries.xml', entries: [...localizedCountryEntries.values()] },
+  { filename: 'locales-categories.xml', entries: [...localizedCategoryEntries.values()] },
 ];
 const storeEntryChunks = chunkEntries([...storeEntries.values()], STORE_SITEMAP_CHUNK_SIZE);
+const localizedStoreEntryChunks = chunkEntries([...localizedStoreEntries.values()], LOCALIZED_STORE_SITEMAP_CHUNK_SIZE);
 
 for (const [index, entries] of storeEntryChunks.entries()) {
   sitemapFiles.push({
     filename: storeEntryChunks.length === 1 ? 'stores.xml' : `stores-${index + 1}.xml`,
+    entries,
+  });
+}
+
+for (const [index, entries] of localizedStoreEntryChunks.entries()) {
+  sitemapFiles.push({
+    filename: localizedStoreEntryChunks.length === 1 ? 'locales-stores.xml' : `locales-stores-${index + 1}.xml`,
     entries,
   });
 }
@@ -292,10 +388,15 @@ console.log(
     `Sub-sitemaps updated: ${updatedSectionCount}`,
     `Files: ${sitemapFiles.length}`,
     `Static: ${staticCount}`,
-    `Countries: ${locationCount}`,
+    `Country landings: ${countryLandingCount}`,
     `Categories: ${categoryCount}`,
     `Stores: ${storeCount}`,
     `Store files: ${storeEntryChunks.length}`,
-    `Total URLs: ${staticCount + locationCount + categoryCount + storeCount}`,
+    `Localized static: ${localizedStaticCount}`,
+    `Localized country landings: ${localizedCountryLandingCount}`,
+    `Localized categories: ${localizedCategoryCount}`,
+    `Localized stores: ${localizedStoreCount}`,
+    `Localized store files: ${localizedStoreEntryChunks.length}`,
+    `Total URLs: ${staticCount + countryLandingCount + categoryCount + storeCount + localizedStaticCount + localizedCountryLandingCount + localizedCategoryCount + localizedStoreCount}`,
   ].join(' '),
 );

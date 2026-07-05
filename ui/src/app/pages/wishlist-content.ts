@@ -17,6 +17,7 @@ import buildingStoreIconSvg from '@eonui/icons/svg/maps/eon-building-store.svg?r
 import cardboardsIconSvg from '@eonui/icons/svg/system/eon-cardboards.svg?raw';
 import tagIconSvg from '@eonui/icons/svg/commerce/eon-tag.svg?raw';
 import { createStaticRouteMeta } from '../services/couponleo-route-meta';
+import { localizeCouponleoRoute } from '../services/couponleo-ui.helpers';
 
 export const routeMeta = createStaticRouteMeta({
   title: 'Wishlist | CouponLeo',
@@ -39,10 +40,10 @@ export const routeMeta = createStaticRouteMeta({
       <p>{{ labels().description }}</p>
 
       <nav class="couponleo-saved-hero__nav" [attr.aria-label]="labels().supportNavigation">
-        <a class="couponleo-saved-hero__nav-link is-active" routerLink="/wishlist">{{ labels().eyebrow }}</a>
-        <a class="couponleo-saved-hero__nav-link" routerLink="/help-center">{{ labels().helpCenter }}</a>
-        <a class="couponleo-saved-hero__nav-link" routerLink="/terms-of-use">{{ labels().termsOfUse }}</a>
-        <a class="couponleo-saved-hero__nav-link" routerLink="/privacy-policy">{{ labels().privacyPolicy }}</a>
+        <a class="couponleo-saved-hero__nav-link is-active" [routerLink]="localizeRoute('/wishlist')">{{ labels().eyebrow }}</a>
+        <a class="couponleo-saved-hero__nav-link" [routerLink]="localizeRoute('/help-center')">{{ labels().helpCenter }}</a>
+        <a class="couponleo-saved-hero__nav-link" [routerLink]="localizeRoute('/terms-of-use')">{{ labels().termsOfUse }}</a>
+        <a class="couponleo-saved-hero__nav-link" [routerLink]="localizeRoute('/privacy-policy')">{{ labels().privacyPolicy }}</a>
       </nav>
 
       <div class="couponleo-saved-hero__stats">
@@ -72,7 +73,7 @@ export const routeMeta = createStaticRouteMeta({
             <strong>{{ labels().signInSync }}</strong>
             <p>{{ labels().localSync }}</p>
           </div>
-          <a class="couponleo-button couponleo-button--ghost" routerLink="/sign-in">{{ labels().signIn }}</a>
+          <a class="couponleo-button couponleo-button--ghost" [routerLink]="localizeRoute('/sign-in')">{{ labels().signIn }}</a>
         </div>
       </section>
     }
@@ -112,7 +113,7 @@ export const routeMeta = createStaticRouteMeta({
                     <p>{{ item.description }}</p>
                   </div>
 
-                  <a class="couponleo-button couponleo-button--ghost couponleo-saved-card__link" [routerLink]="item.route">
+                  <a class="couponleo-button couponleo-button--ghost couponleo-saved-card__link" [routerLink]="localizeRoute(item.route)">
                     {{ labels().openStore }}
                   </a>
                 </article>
@@ -158,7 +159,7 @@ export const routeMeta = createStaticRouteMeta({
                     <p>{{ item.description }}</p>
                   </div>
 
-                  <a class="couponleo-button couponleo-button--ghost couponleo-saved-card__link" [routerLink]="item.route">
+                  <a class="couponleo-button couponleo-button--ghost couponleo-saved-card__link" [routerLink]="localizeRoute(item.route)">
                     {{ labels().openCategory }}
                   </a>
                 </article>
@@ -234,8 +235,8 @@ export const routeMeta = createStaticRouteMeta({
           <h3>{{ labels().noWishlist }}</h3>
           <p>{{ labels().noWishlistCopy }}</p>
           <div class="couponleo-saved-empty__actions">
-            <a class="couponleo-button couponleo-button--solid" routerLink="/top-deals">{{ labels().browseTopDeals }}</a>
-            <a class="couponleo-button couponleo-button--ghost" routerLink="/categories">{{ labels().browseCategories }}</a>
+              <a class="couponleo-button couponleo-button--solid" [routerLink]="localizeRoute('/top-deals')">{{ labels().browseTopDeals }}</a>
+              <a class="couponleo-button couponleo-button--ghost" [routerLink]="localizeRoute('/categories')">{{ labels().browseCategories }}</a>
           </div>
         </div>
       </section>
@@ -506,6 +507,7 @@ export default class WishlistPage {
   private readonly authService = inject(CouponleoAuthService);
   protected readonly i18n = inject(CouponleoI18nService);
   private readonly savedService = inject(CouponleoSavedService);
+  protected readonly localizeRoute = (path: string) => localizeCouponleoRoute(path, this.i18n.locale());
 
   protected readonly savedItems = this.savedService.items;
   protected readonly totalSaved = this.savedService.count;
@@ -583,7 +585,7 @@ export default class WishlistPage {
       subtitle: item.subtitle,
       description: item.description,
       code: item.code,
-      route: item.route,
+      route: this.localizeRoute(item.route),
     });
   }
 

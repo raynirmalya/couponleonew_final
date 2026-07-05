@@ -5,7 +5,7 @@ import { CouponleoAuthService } from '../services/couponleo-auth.service';
 import { CouponleoI18nService } from '../services/couponleo-i18n.service';
 import { CouponleoPageContentService } from '../services/couponleo-page-content.service';
 import { createStaticRouteMeta } from '../services/couponleo-route-meta';
-import { buildStoreRoute, formatExpiryLabel, getCategoryPresentation, slugifyLabel } from '../services/couponleo-ui.helpers';
+import { buildStoreRoute, formatExpiryLabel, getCategoryPresentation, localizeCouponleoRoute, slugifyLabel } from '../services/couponleo-ui.helpers';
 import type { CouponleoSavedItem } from '../services/couponleo-saved.service';
 
 import shoppingCartIconSvg from '@eonui/icons/svg/commerce/eon-shopping-cart.svg?raw';
@@ -150,7 +150,7 @@ function activityToneFromSavedItem(item: CouponleoSavedItem): 'orange' | 'blue' 
             </div>
 
             <div class="couponleo-dashboard-shell__topbar-actions">
-              <a class="couponleo-button couponleo-button--solid" routerLink="/alerts">
+              <a class="couponleo-button couponleo-button--solid" [routerLink]="localizeRoute('/alerts')">
                 {{ labels().manageAlerts }}
               </a>
 
@@ -234,12 +234,12 @@ function activityToneFromSavedItem(item: CouponleoSavedItem): 'orange' | 'blue' 
                     <h2>{{ labels().wishlist }}</h2>
                     <p>{{ labels().wishlistCopy }}</p>
                   </div>
-                  <a routerLink="/wishlist">{{ labels().viewAll }}</a>
+                  <a [routerLink]="localizeRoute('/wishlist')">{{ labels().viewAll }}</a>
                 </div>
 
                 <div class="couponleo-dashboard-card__saved-list">
                   @for (deal of savedDeals(); track deal.id) {
-                    <a class="couponleo-dashboard-card__saved-item" [routerLink]="deal.route">
+                    <a class="couponleo-dashboard-card__saved-item" [routerLink]="localizeRoute(deal.route)">
                       <div class="couponleo-dashboard-card__saved-thumb">
                         <img [src]="deal.imageSrc" [alt]="deal.category + ' deal image'" loading="lazy">
                       </div>
@@ -259,7 +259,7 @@ function activityToneFromSavedItem(item: CouponleoSavedItem): 'orange' | 'blue' 
                     <h2>{{ labels().alertCenter }}</h2>
                     <p>{{ labels().alertCenterCopy }}</p>
                   </div>
-                  <a routerLink="/alerts">{{ labels().openQueue }}</a>
+                  <a [routerLink]="localizeRoute('/alerts')">{{ labels().openQueue }}</a>
                 </div>
 
                 <div class="couponleo-dashboard-card__alert-summary">
@@ -267,12 +267,12 @@ function activityToneFromSavedItem(item: CouponleoSavedItem): 'orange' | 'blue' 
                     <strong>{{ notificationCount() }}</strong>
                     <span>{{ labels().alertsNeedAttention }}</span>
                   </div>
-                  <a routerLink="/alerts">{{ labels().manageAlerts }}</a>
+                  <a [routerLink]="localizeRoute('/alerts')">{{ labels().manageAlerts }}</a>
                 </div>
 
                 <div class="couponleo-dashboard-card__notification-actions">
-                  <a routerLink="/alerts">{{ labels().openQueue }}</a>
-                  <a routerLink="/wishlist">{{ labels().reviewWishlist }}</a>
+                  <a [routerLink]="localizeRoute('/alerts')">{{ labels().openQueue }}</a>
+                  <a [routerLink]="localizeRoute('/wishlist')">{{ labels().reviewWishlist }}</a>
                 </div>
 
                 <div class="couponleo-dashboard-card__notification-list">
@@ -304,7 +304,7 @@ function activityToneFromSavedItem(item: CouponleoSavedItem): 'orange' | 'blue' 
                   <h2>{{ labels().nextActions }}</h2>
                   <p>{{ labels().nextActionsCopy }}</p>
                 </div>
-                <a routerLink="/alerts">{{ labels().manageAlerts }}</a>
+                <a [routerLink]="localizeRoute('/alerts')">{{ labels().manageAlerts }}</a>
               </div>
 
               <div class="couponleo-dashboard-card__workspace-grid">
@@ -316,7 +316,7 @@ function activityToneFromSavedItem(item: CouponleoSavedItem): 'orange' | 'blue' 
                     <span class="couponleo-card__badge">{{ card.badge }}</span>
                     <strong>{{ card.title }}</strong>
                     <p>{{ card.copy }}</p>
-                    <a [routerLink]="card.href">{{ card.cta }}</a>
+                    <a [routerLink]="localizeRoute(card.href)">{{ card.cta }}</a>
                   </article>
                 }
               </div>
@@ -328,7 +328,7 @@ function activityToneFromSavedItem(item: CouponleoSavedItem): 'orange' | 'blue' 
                   <h2>{{ labels().recentActivity }}</h2>
                   <p>{{ labels().recentActivityCopy }}</p>
                 </div>
-                <a routerLink="/my-coupons">View all</a>
+                <a [routerLink]="localizeRoute('/my-coupons')">View all</a>
               </div>
 
               <div class="couponleo-dashboard-card__activity-list">
@@ -362,8 +362,8 @@ function activityToneFromSavedItem(item: CouponleoSavedItem): 'orange' | 'blue' 
         <h1>Sign in to open your dashboard.</h1>
         <p>This area becomes active after email login, signup, or Google login through AuthBridge.</p>
         <div class="couponleo-dashboard-shell__empty-actions">
-          <a class="couponleo-button couponleo-button--solid" routerLink="/sign-in">Go to Sign In</a>
-          <a class="couponleo-button couponleo-button--ghost" routerLink="/sign-up">Create Account</a>
+          <a class="couponleo-button couponleo-button--solid" [routerLink]="localizeRoute('/sign-in')">Go to Sign In</a>
+          <a class="couponleo-button couponleo-button--ghost" [routerLink]="localizeRoute('/sign-up')">Create Account</a>
         </div>
       </section>
     }
@@ -1153,9 +1153,13 @@ export default class DashboardPage {
   private readonly content = inject(CouponleoPageContentService);
   protected readonly i18n = inject(CouponleoI18nService);
   private readonly router = inject(Router);
+  protected readonly localizeRoute = (path: string) => localizeCouponleoRoute(path, this.i18n.locale());
 
   protected readonly session = this.authService.session;
-  protected readonly dashboardNavItems = computed(() => this.i18n.localize(dashboardNavItems));
+  protected readonly dashboardNavItems = computed(() => this.i18n.localize(dashboardNavItems).map((item) => ({
+    ...item,
+    href: this.localizeRoute(item.href),
+  })));
   protected readonly labels = computed(() => ({
     dashboardNavigation: this.i18n.phrase('Dashboard navigation'),
     memberWorkspace: this.i18n.phrase('Member Workspace'),

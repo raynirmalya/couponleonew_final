@@ -15,9 +15,11 @@ import {
   type CouponleoStore,
 } from '../../services/couponleo-api.service';
 import { createLoadingState, withHydratedRequestState } from '../../services/couponleo-request-state.helpers';
-import { createStaticRouteMeta } from '../../services/couponleo-route-meta';
+import { createDynamicRouteMeta } from '../../services/couponleo-route-meta';
 import { CouponleoI18nService } from '../../services/couponleo-i18n.service';
+import { proxiedCouponleoLogoUrl } from '../../services/couponleo-logo.helpers';
 import { CouponleoSavedService } from '../../services/couponleo-saved.service';
+import { buildCouponleoStoreCardDescriptionForMarket } from '../../services/couponleo-seo-copy.helpers';
 import {
   fetchCouponleoData,
   fetchCouponleoList,
@@ -28,6 +30,7 @@ import {
   buildStoreRoute,
   formatCount,
   getCategoryPresentation,
+  localizeCouponleoRoute,
   locationFilterForCountry,
   matchesCountry,
   normalizeCountryRouteValue,
@@ -68,14 +71,25 @@ interface StoreStat {
 }
 
 const heroBenefits = [
-  { title: 'Verified Stores', copy: 'Live merchant records', icon: shieldCheckIconSvg },
-  { title: 'Best Coupons', copy: 'Pulled from current counts', icon: tagIconSvg },
-  { title: 'Safe & Secure', copy: 'Local API with browser CORS', icon: shieldLockIconSvg },
+  { title: 'Verified Stores', copy: 'Brands with active deal coverage', icon: shieldCheckIconSvg },
+  { title: 'Best Coupons', copy: 'Live coupon counts worth checking', icon: tagIconSvg },
+  { title: 'Smart Filters', copy: 'Browse by market, category, or letter', icon: shieldLockIconSvg },
 ];
 
-export const routeMeta = createStaticRouteMeta({
-  title: 'Stores | CouponLeo',
-  description: 'Browse CouponLeo stores with live merchant records, category filters, alphabetical search, and featured brands.',
+export const routeMeta = createDynamicRouteMeta((route) => {
+  const country = normalizeCountryRouteValue(route.queryParamMap.get('country'));
+
+  if (country === 'all') {
+    return {
+      title: 'Stores with Live Coupon Codes and Deals | CouponLeo',
+      description: 'Browse stores with live coupon codes, promo codes, and sale offers so you can compare brand-by-brand savings before checkout.',
+    };
+  }
+
+  return {
+    title: `Stores with Deals in ${country} | CouponLeo`,
+    description: `Browse the stores with live coupon codes, promo codes, and current savings that feel most relevant for shoppers in ${country}.`,
+  };
 });
 
 const alphabet = ['All', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '#'];
@@ -171,29 +185,16 @@ function isBlockedStoreLogoUrl(url: string): boolean {
 }
 
 function proxiedStoreLogoUrl(url: string): string {
-  if (!url) {
-    return '';
-  }
-
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return parsed.toString();
-    }
-  } catch {
-    return url;
-  }
-
-  return url;
+  return proxiedCouponleoLogoUrl(url);
 }
 
-function toStoreCardViewModel(store: CouponleoStore): StoreCardViewModel {
+function toStoreCardViewModel(store: CouponleoStore, selectedCountry: string): StoreCardViewModel {
   return {
     id: `store-${store.slug}`,
     name: store.name,
     slug: store.slug,
     deals: `${store.activeCoupons} active coupons`,
-    description: store.headline,
+    description: buildCouponleoStoreCardDescriptionForMarket(store, selectedCountry),
     route: buildStoreRoute(store.slug),
     location: store.location,
     category: store.category,
@@ -220,7 +221,7 @@ function toStoreCardViewModel(store: CouponleoStore): StoreCardViewModel {
         <h1 class="couponleo-route-hero__title">{{ labels().title }}</h1>
         <p>{{ labels().description }}</p>
 
-        <form class="couponleo-searchbar" (submit)="$event.preventDefault()">
+        <form class="couponleo-searchbar" (submit)="$event.preventDefault()" data-telemetry-event="stores_search_submit" data-telemetry-label="Stores search">
           <span class="couponleo-searchbar__icon" aria-hidden="true">
             <app-couponleo-eon-icon [svg]="searchIconSvg"></app-couponleo-eon-icon>
           </span>
@@ -229,9 +230,16 @@ function toStoreCardViewModel(store: CouponleoStore): StoreCardViewModel {
             [placeholder]="labels().searchStores"
             [attr.aria-label]="labels().searchStores"
             [value]="searchQuery()"
+            data-telemetry-event="stores_search_input"
+            data-telemetry-label="Stores search"
             (input)="updateSearch($event)"
           >
-          <button type="submit" class="couponleo-searchbar__button couponleo-searchbar__button--text">
+          <button
+            type="submit"
+            class="couponleo-searchbar__button couponleo-searchbar__button--text"
+            data-telemetry-event="stores_search_button"
+            data-telemetry-label="Stores search"
+          >
             {{ i18n.phrase('Search') }}
           </button>
         </form>
@@ -302,6 +310,8 @@ function toStoreCardViewModel(store: CouponleoStore): StoreCardViewModel {
                 [placeholder]="labels().searchCategories"
                 [attr.aria-label]="labels().searchCategories"
                 [value]="categorySearchQuery()"
+                data-telemetry-event="stores_sidebar_category_search"
+                data-telemetry-label="Store category filter"
                 (input)="updateCategorySearch($event)"
               >
             </label>
@@ -313,6 +323,8 @@ function toStoreCardViewModel(store: CouponleoStore): StoreCardViewModel {
                   type="button"
                   class="couponleo-store-sidebar__item couponleo-store-sidebar__item--button"
                   [class.is-active]="selectedCategory() === 'all'"
+                  data-telemetry-event="stores_filter_category"
+                  data-telemetry-label="All Categories"
                   (click)="selectCategory('all')"
                 >
                   <span class="couponleo-store-sidebar__item-label">
@@ -330,6 +342,8 @@ function toStoreCardViewModel(store: CouponleoStore): StoreCardViewModel {
                       type="button"
                       class="couponleo-store-sidebar__item couponleo-store-sidebar__item--button"
                       [class.is-active]="selectedCategory() === category.slug"
+                      data-telemetry-event="stores_filter_category"
+                      [attr.data-telemetry-label]="category.name"
                       (click)="selectCategory(category.slug)"
                     >
                       <span class="couponleo-store-sidebar__item-label">
@@ -354,6 +368,8 @@ function toStoreCardViewModel(store: CouponleoStore): StoreCardViewModel {
                       type="button"
                       class="couponleo-letter-pill"
                       [class.is-active]="selectedLetter() === letter"
+                      data-telemetry-event="stores_filter_letter"
+                      [attr.data-telemetry-label]="letter"
                       (click)="selectLetter(letter)"
                     >
                       {{ letter }}
@@ -386,7 +402,15 @@ function toStoreCardViewModel(store: CouponleoStore): StoreCardViewModel {
                       } @else {
                         <span class="couponleo-feature-chip__brand-fallback">{{ store.initials }}</span>
                       }
-                      <strong class="couponleo-feature-chip__name" [attr.title]="store.name">{{ store.name }}</strong>
+                      <strong class="couponleo-feature-chip__name" [attr.title]="store.name">
+                        <a
+                          class="couponleo-store-name-link"
+                          [routerLink]="store.route"
+                          [queryParams]="countryRouteQuery()"
+                          data-telemetry-event="stores_featured_store_name_open"
+                          [attr.data-telemetry-label]="store.name"
+                        >{{ store.name }}</a>
+                      </strong>
                     </div>
                     <app-couponleo-favorite-button
                       [active]="isSaved(store.id)"
@@ -395,7 +419,13 @@ function toStoreCardViewModel(store: CouponleoStore): StoreCardViewModel {
                     ></app-couponleo-favorite-button>
                   </div>
                   <span>{{ store.deals }}</span>
-                  <a class="couponleo-feature-chip__link" [routerLink]="store.route" [queryParams]="countryRouteQuery()">{{ labels().openDeals }}</a>
+                  <a
+                    class="couponleo-feature-chip__link"
+                    [routerLink]="store.route"
+                    [queryParams]="countryRouteQuery()"
+                    data-telemetry-event="stores_featured_store_open"
+                    [attr.data-telemetry-label]="store.name"
+                  >{{ labels().openDeals }}</a>
                 </article>
               }
             </div>
@@ -427,7 +457,14 @@ function toStoreCardViewModel(store: CouponleoStore): StoreCardViewModel {
                             <span class="couponleo-store-showcase-card__brand-fallback">{{ store.initials }}</span>
                           }
                           <div class="couponleo-store-showcase-card__copy">
-                            <div class="couponleo-store-showcase-card__logo" [attr.title]="store.name">{{ store.name }}</div>
+                            <a
+                              class="couponleo-store-name-link couponleo-store-showcase-card__logo"
+                              [routerLink]="store.route"
+                              [queryParams]="countryRouteQuery()"
+                              [attr.title]="store.name"
+                              data-telemetry-event="stores_directory_store_name_open"
+                              [attr.data-telemetry-label]="store.name"
+                            >{{ store.name }}</a>
                             <div
                               class="couponleo-store-showcase-card__meta"
                               [attr.title]="store.location + ' | ' + store.category"
@@ -445,7 +482,13 @@ function toStoreCardViewModel(store: CouponleoStore): StoreCardViewModel {
                     <p [attr.title]="store.description">{{ store.description }}</p>
                     <div class="couponleo-store-showcase-card__footer">
                       <span class="couponleo-store-showcase-card__savings">{{ store.savings }}</span>
-                      <a class="couponleo-button couponleo-button--ghost" [routerLink]="store.route" [queryParams]="countryRouteQuery()">{{ labels().viewDeals }}</a>
+                      <a
+                        class="couponleo-button couponleo-button--ghost"
+                        [routerLink]="store.route"
+                        [queryParams]="countryRouteQuery()"
+                        data-telemetry-event="stores_directory_store_open"
+                        [attr.data-telemetry-label]="store.name"
+                      >{{ labels().viewDeals }}</a>
                     </div>
                   </article>
                 }
@@ -1214,7 +1257,7 @@ export default class StoresPage {
   protected readonly labels = computed(() => ({
     eyebrow: this.i18n.phrase('Stores'),
     title: this.i18n.phrase('Top Stores'),
-    description: this.i18n.phrase('Browse the live store catalog from the local CouponLeo API with filters for category, name, and first letter.'),
+    description: this.i18n.phrase('Start with the brands you know, then narrow the list by category, market, or first letter until the shortlist feels worth opening.'),
     searchStores: this.i18n.phrase('Search stores'),
     searchCategories: this.i18n.phrase('Search categories'),
     verifiedStores: this.i18n.phrase('Featured stores'),
@@ -1226,7 +1269,7 @@ export default class StoresPage {
     matchingStores: this.i18n.phrase('matching stores'),
     viewDeals: this.i18n.phrase('View Deals'),
     noStores: this.i18n.phrase('No stores match these filters'),
-    noStoresCopy: this.i18n.phrase('Try a different search term, category, or letter to widen the local store list.'),
+    noStoresCopy: this.i18n.phrase('Try a different search term, category, or letter to bring more store options back into view.'),
     noMatchingCategories: this.i18n.phrase('No categories match this search'),
     stores: this.i18n.phrase('Stores'),
     coupons: this.i18n.phrase('Coupons'),
@@ -1297,7 +1340,7 @@ export default class StoresPage {
 
     return [...storesToShow]
       .slice(0, 12)
-      .map((store) => this.localizeStoreCard(toStoreCardViewModel(store)));
+      .map((store) => this.localizeStoreCard(toStoreCardViewModel(store, this.selectedCountry())));
   });
 
   protected readonly countryCouponTotal = computed(() => {
@@ -1321,7 +1364,7 @@ export default class StoresPage {
   protected readonly storeDirectoryTotal = computed(() => this.directoryStoresResponse().total || this.directoryStoresResponse().items.length);
   protected readonly storePageCount = computed(() => this.directoryStoresResponse().pageCount ?? 1);
   protected readonly pagedStores = computed<StoreCardViewModel[]>(() => (
-    this.directoryStoresResponse().items.map((store) => this.localizeStoreCard(toStoreCardViewModel(store)))
+    this.directoryStoresResponse().items.map((store) => this.localizeStoreCard(toStoreCardViewModel(store, this.selectedCountry())))
   ));
 
   protected readonly stats = computed<StoreStat[]>(() => {
@@ -1433,6 +1476,7 @@ export default class StoresPage {
     return {
       ...store,
       deals: this.formatCount(activeCoupons, 'active coupon', 'active coupons'),
+      route: localizeCouponleoRoute(store.route, this.i18n.locale()),
     };
   }
 

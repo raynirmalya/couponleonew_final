@@ -15,8 +15,9 @@ import {
   type CouponleoStore,
 } from '../../services/couponleo-api.service';
 import { createLoadingState, withHydratedRequestState } from '../../services/couponleo-request-state.helpers';
-import { createStaticRouteMeta } from '../../services/couponleo-route-meta';
+import { createDynamicRouteMeta } from '../../services/couponleo-route-meta';
 import { CouponleoSavedService } from '../../services/couponleo-saved.service';
+import { buildCouponleoCategoryCardDescription } from '../../services/couponleo-seo-copy.helpers';
 import {
   fetchCouponleoList,
   readCouponleoQueryParam,
@@ -28,6 +29,7 @@ import {
   formatCount,
   getCategoryPresentation,
   isCouponLive,
+  localizeCouponleoRoute,
   locationFilterForCountry,
   normalizeCountryRouteValue,
   pageCountFor,
@@ -101,9 +103,20 @@ function matchesCategoryQuery(category: CategoryDirectoryCard, query: string): b
   return [category.name, category.headline].some((value) => value.toLowerCase().includes(normalizedQuery));
 }
 
-export const routeMeta = createStaticRouteMeta({
-  title: 'Categories | CouponLeo',
-  description: 'Browse the CouponLeo category directory with live category coverage, market filters, and direct drilldown pages.',
+export const routeMeta = createDynamicRouteMeta((route) => {
+  const country = normalizeCountryRouteValue(route.queryParamMap.get('country'));
+
+  if (country === 'all') {
+    return {
+      title: 'Categories with Live Coupon Codes and Deals | CouponLeo',
+      description: 'Explore shopping categories with live coupon codes, promo offers, and active stores so comparison shopping feels easier.',
+    };
+  }
+
+  return {
+    title: `Categories with Deals in ${country} | CouponLeo`,
+    description: `Browse shopping categories with live coupon codes, promo offers, and current savings that matter most for shoppers in ${country}.`,
+  };
 });
 
 @Component({
@@ -123,7 +136,7 @@ export const routeMeta = createStaticRouteMeta({
           <h1>{{ i18n.t('categories.title') }}</h1>
           <p>{{ i18n.t('categories.description') }}</p>
 
-          <form class="couponleo-searchbar" (submit)="$event.preventDefault()">
+          <form class="couponleo-searchbar" (submit)="$event.preventDefault()" data-telemetry-event="categories_search_submit" data-telemetry-label="Categories search">
             <span class="couponleo-searchbar__icon" aria-hidden="true">
               <app-couponleo-eon-icon [svg]="searchIconSvg"></app-couponleo-eon-icon>
             </span>
@@ -132,9 +145,17 @@ export const routeMeta = createStaticRouteMeta({
               [placeholder]="i18n.t('categories.searchPlaceholder')"
               [attr.aria-label]="i18n.t('categories.searchPlaceholder')"
               [value]="searchQuery()"
+              data-telemetry-event="categories_search_input"
+              data-telemetry-label="Categories search"
               (input)="updateSearch($event)"
             >
-            <button type="submit" class="couponleo-searchbar__button" [attr.aria-label]="i18n.t('common.search')">
+            <button
+              type="submit"
+              class="couponleo-searchbar__button"
+              [attr.aria-label]="i18n.t('common.search')"
+              data-telemetry-event="categories_search_button"
+              data-telemetry-label="Categories search"
+            >
               <app-couponleo-eon-icon [svg]="searchIconSvg"></app-couponleo-eon-icon>
             </button>
           </form>
@@ -194,7 +215,13 @@ export const routeMeta = createStaticRouteMeta({
                   <span>{{ category.stores }}</span>
                 </div>
 
-                <a class="couponleo-button couponleo-button--ghost" [routerLink]="category.route" [queryParams]="countryRouteQuery()">{{ i18n.t('categories.exploreCategory') }}</a>
+                <a
+                  class="couponleo-button couponleo-button--ghost"
+                  [routerLink]="localizeRoute(category.route)"
+                  [queryParams]="countryRouteQuery()"
+                  data-telemetry-event="categories_directory_open"
+                  [attr.data-telemetry-label]="category.name"
+                >{{ i18n.t('categories.exploreCategory') }}</a>
               </article>
             }
           </div>
@@ -489,6 +516,7 @@ export default class CategoriesPage {
   protected readonly directoryPage = signal(1);
   protected readonly selectedCountry = toSignal(this.countryQueryParamMap, { initialValue: this.initialCountry });
   protected readonly countryRouteQuery = computed(() => buildCountryRouteQuery(this.selectedCountry()));
+  protected readonly localizeRoute = (path: string) => localizeCouponleoRoute(path, this.i18n.locale());
   protected readonly isLoading = computed(() => (
     this.categoriesState().loading
     || this.couponsState().loading
@@ -514,10 +542,10 @@ export default class CategoriesPage {
           return {
             id: `category-${category.slug}`,
             name: category.name,
-            headline: category.headline ?? this.i18n.t('categories.defaultHeadline'),
+            headline: buildCouponleoCategoryCardDescription(category),
             imageSrc: presentation.imageSrc,
             imageAlt: presentation.imageAlt,
-            route: buildCategoryRoute(category.slug),
+            route: this.localizeRoute(buildCategoryRoute(category.slug)),
             deals: formatCount(category.couponCount ?? 0, 'live offer', 'live offers'),
             stores: formatCount(category.storeCount ?? 0, 'store', 'stores'),
             couponCount: category.couponCount ?? 0,
@@ -539,10 +567,13 @@ export default class CategoriesPage {
         return {
           id: `category-${summary.slug}`,
           name: summary.name,
-          headline: summary.headline,
+          headline: buildCouponleoCategoryCardDescription(
+            this.categoriesResponse().items.find((category) => category.slug === summary.slug)
+            ?? { name: summary.name, headline: summary.headline },
+          ),
           imageSrc: presentation.imageSrc,
           imageAlt: presentation.imageAlt,
-          route: buildCategoryRoute(summary.slug),
+          route: this.localizeRoute(buildCategoryRoute(summary.slug)),
           deals: formatCount(summary.couponCount, 'live offer', 'live offers'),
           stores: formatCount(summary.storeCount, 'store', 'stores'),
           couponCount: summary.couponCount,

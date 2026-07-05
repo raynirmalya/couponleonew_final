@@ -2,6 +2,7 @@ import { Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CouponleoNewsletterFormComponent } from './couponleo-newsletter-form.component';
 import { CouponleoI18nService } from '../services/couponleo-i18n.service';
+import { localizeCouponleoRoute } from '../services/couponleo-ui.helpers';
 
 interface FooterGroup {
   title: string;
@@ -38,7 +39,14 @@ interface FooterGroup {
     <footer class="couponleo-footer">
       <div class="couponleo-footer__grid">
         <div class="couponleo-footer__brand">
-          <a class="couponleo-brand couponleo-brand--footer" routerLink="/" queryParamsHandling="preserve" [attr.aria-label]="copy().couponleoHome">
+          <a
+            class="couponleo-brand couponleo-brand--footer"
+            [routerLink]="localizeRoute('/')"
+            queryParamsHandling="preserve"
+            [attr.aria-label]="copy().couponleoHome"
+            data-telemetry-event="footer_brand_home"
+            [attr.data-telemetry-label]="copy().couponleoHome"
+          >
             <span class="couponleo-brand__footer-mark" aria-hidden="true">
               <img class="couponleo-brand__footer-mark-image" src="/images/couponleo-logo.png" alt="">
             </span>
@@ -50,9 +58,19 @@ interface FooterGroup {
           <p>{{ copy().brandDescription }}</p>
           <p class="couponleo-footer__contact-note">
             {{ copy().contactPrefix }}
-            <a routerLink="/contact" queryParamsHandling="preserve">{{ copy().contactTeam }}</a>
+            <a
+              [routerLink]="localizeRoute('/contact')"
+              queryParamsHandling="preserve"
+              data-telemetry-event="footer_contact_link"
+              [attr.data-telemetry-label]="copy().contactTeam"
+            >{{ copy().contactTeam }}</a>
             /
-            <a routerLink="/help-center" queryParamsHandling="preserve">{{ copy().helpCenter }}</a>.
+            <a
+              [routerLink]="localizeRoute('/help-center')"
+              queryParamsHandling="preserve"
+              data-telemetry-event="footer_help_link"
+              [attr.data-telemetry-label]="copy().helpCenter"
+            >{{ copy().helpCenter }}</a>.
           </p>
         </div>
 
@@ -60,7 +78,12 @@ interface FooterGroup {
           <div class="couponleo-footer__group">
             <h4>{{ group.title }}</h4>
             @for (link of group.links; track link.href) {
-              <a [routerLink]="link.href" queryParamsHandling="preserve">{{ link.label }}</a>
+              <a
+                [routerLink]="link.href"
+                queryParamsHandling="preserve"
+                data-telemetry-event="footer_link"
+                [attr.data-telemetry-label]="link.label"
+              >{{ link.label }}</a>
             }
           </div>
         }
@@ -75,6 +98,7 @@ interface FooterGroup {
 })
 export class CouponleoFooterComponent {
   protected readonly i18n = inject(CouponleoI18nService);
+  protected readonly localizeRoute = (path: string) => localizeCouponleoRoute(path, this.i18n.locale());
   protected readonly copy = computed(() => ({
     aboutUs: this.i18n.t('footer.aboutUs'),
     allStores: this.i18n.t('footer.allStores'),
@@ -101,27 +125,27 @@ export class CouponleoFooterComponent {
     {
       title: this.copy().explore,
       links: [
-        { href: '/stores', label: this.copy().allStores },
-        { href: '/categories', label: this.i18n.t('nav.categories') },
-        { href: '/country-deals', label: this.i18n.t('nav.countryDeals') },
-        { href: '/top-deals', label: this.i18n.t('nav.topDeals') },
-        { href: '/blog', label: this.i18n.t('nav.blog') },
+        { href: this.localizeRoute('/stores'), label: this.copy().allStores },
+        { href: this.localizeRoute('/categories'), label: this.i18n.t('nav.categories') },
+        { href: this.localizeRoute('/country-deals'), label: this.i18n.t('nav.countryDeals') },
+        { href: this.localizeRoute('/top-deals'), label: this.i18n.t('nav.topDeals') },
+        { href: this.localizeRoute('/blog'), label: this.i18n.t('nav.blog') },
       ],
     },
     {
       title: this.copy().company,
       links: [
-        { href: '/about', label: this.copy().aboutUs },
-        { href: '/contact', label: this.copy().contactUs },
+        { href: this.localizeRoute('/about'), label: this.copy().aboutUs },
+        { href: this.localizeRoute('/contact'), label: this.copy().contactUs },
       ],
     },
     {
       title: this.copy().support,
       links: [
-        { href: '/wishlist', label: this.copy().wishlist },
-        { href: '/help-center', label: this.copy().helpCenter },
-        { href: '/terms-of-use', label: this.copy().terms },
-        { href: '/privacy-policy', label: this.copy().privacy },
+        { href: this.localizeRoute('/wishlist'), label: this.copy().wishlist },
+        { href: this.localizeRoute('/help-center'), label: this.copy().helpCenter },
+        { href: this.localizeRoute('/terms-of-use'), label: this.copy().terms },
+        { href: this.localizeRoute('/privacy-policy'), label: this.copy().privacy },
       ],
     },
   ]);

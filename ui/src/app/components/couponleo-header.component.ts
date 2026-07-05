@@ -13,6 +13,7 @@ import { createLoadingState, withRequestState } from '../services/couponleo-requ
 import { CouponleoSavedService } from '../services/couponleo-saved.service';
 import {
   buildCountryOptions,
+  localizeCouponleoRoute,
   normalizeCountryRouteValue,
 } from '../services/couponleo-ui.helpers';
 import { CouponleoI18nService } from '../services/couponleo-i18n.service';
@@ -34,7 +35,15 @@ function emptyListResponse<T>() {
     <header class="couponleo-header">
       <div class="couponleo-nav-shell" [class.is-open]="menuOpen()">
         <div class="couponleo-nav-shell__bar">
-          <a class="couponleo-brand" routerLink="/" queryParamsHandling="preserve" [attr.aria-label]="copy().couponleoHome" (click)="closeMenu()">
+          <a
+            class="couponleo-brand"
+            [routerLink]="localizeRoute('/')"
+            queryParamsHandling="preserve"
+            [attr.aria-label]="copy().couponleoHome"
+            data-telemetry-event="nav_brand_home"
+            [attr.data-telemetry-label]="copy().couponleoHome"
+            (click)="closeMenu()"
+          >
             <span class="couponleo-brand__image-shell">
               <img class="couponleo-brand__image" src="/images/couponleo-logo.png" alt="CouponLeo">
             </span>
@@ -47,6 +56,8 @@ function emptyListResponse<T>() {
             [attr.aria-label]="copy().menu"
             aria-controls="couponleo-mobile-nav"
             [attr.aria-expanded]="menuOpen()"
+            data-telemetry-event="nav_menu_toggle"
+            [attr.data-telemetry-label]="copy().menu"
           >
             <span></span>
             <span></span>
@@ -64,6 +75,8 @@ function emptyListResponse<T>() {
                   queryParamsHandling="preserve"
                   routerLinkActive="is-active"
                   [routerLinkActiveOptions]="{ exact: link.href === '/' }"
+                  data-telemetry-event="nav_primary_link"
+                  [attr.data-telemetry-label]="link.label"
                   (click)="closeMenu()"
                 >
                   {{ link.label }}
@@ -78,6 +91,8 @@ function emptyListResponse<T>() {
                   [attr.aria-label]="copy().market"
                   [value]="selectedCountry()"
                   [disabled]="locationsState().loading"
+                  data-telemetry-event="nav_market_change"
+                  [attr.data-telemetry-label]="copy().market"
                   (change)="handleCountryChange($event)"
                 >
                   @for (option of countryOptions(); track option.value) {
@@ -91,6 +106,8 @@ function emptyListResponse<T>() {
                 <select
                   [attr.aria-label]="copy().language"
                   [value]="selectedLocale()"
+                  data-telemetry-event="nav_locale_change"
+                  [attr.data-telemetry-label]="copy().language"
                   (change)="handleLocaleChange($event)"
                 >
                   @for (option of localeOptions(); track option.value) {
@@ -101,10 +118,12 @@ function emptyListResponse<T>() {
 
               <a
                 class="couponleo-nav__saved"
-                routerLink="/wishlist"
+                [routerLink]="localizeRoute('/wishlist')"
                 queryParamsHandling="preserve"
                 [attr.aria-label]="copy().wishlist"
                 [attr.title]="copy().wishlist"
+                data-telemetry-event="nav_wishlist_open"
+                [attr.data-telemetry-label]="copy().wishlist"
                 (click)="closeMenu()"
               >
                 <span class="couponleo-nav__saved-label">{{ copy().wishlist }}</span>
@@ -115,15 +134,42 @@ function emptyListResponse<T>() {
               </a>
 
               @if (isAuthenticated()) {
-                <a class="couponleo-nav__account" routerLink="/dashboard" queryParamsHandling="preserve" (click)="closeMenu()">
+                <a
+                  class="couponleo-nav__account"
+                  [routerLink]="localizeRoute('/dashboard')"
+                  queryParamsHandling="preserve"
+                  data-telemetry-event="nav_account_open"
+                  [attr.data-telemetry-label]="accountLabel()"
+                  (click)="closeMenu()"
+                >
                   {{ accountLabel() }}
                 </a>
-                <button type="button" class="couponleo-button couponleo-button--ghost" (click)="handleSignOut()">
+                <button
+                  type="button"
+                  class="couponleo-button couponleo-button--ghost"
+                  data-telemetry-event="nav_sign_out"
+                  [attr.data-telemetry-label]="copy().signOut"
+                  (click)="handleSignOut()"
+                >
                   {{ copy().signOut }}
                 </button>
               } @else {
-                <a class="couponleo-button couponleo-button--ghost" routerLink="/sign-in" queryParamsHandling="preserve" (click)="closeMenu()">{{ copy().signIn }}</a>
-                <a class="couponleo-button couponleo-button--solid" routerLink="/sign-up" queryParamsHandling="preserve" (click)="closeMenu()">{{ copy().signUp }}</a>
+                <a
+                  class="couponleo-button couponleo-button--ghost"
+                  [routerLink]="localizeRoute('/sign-in')"
+                  queryParamsHandling="preserve"
+                  data-telemetry-event="nav_sign_in_open"
+                  [attr.data-telemetry-label]="copy().signIn"
+                  (click)="closeMenu()"
+                >{{ copy().signIn }}</a>
+                <a
+                  class="couponleo-button couponleo-button--solid"
+                  [routerLink]="localizeRoute('/sign-up')"
+                  queryParamsHandling="preserve"
+                  data-telemetry-event="nav_sign_up_open"
+                  [attr.data-telemetry-label]="copy().signUp"
+                  (click)="closeMenu()"
+                >{{ copy().signUp }}</a>
               }
             </div>
           </div>
@@ -254,14 +300,15 @@ export class CouponleoHeaderComponent {
   private readonly localeService = inject(CouponleoLocaleService);
   private readonly savedService = inject(CouponleoSavedService);
   private readonly router = inject(Router);
+  protected readonly localizeRoute = (path: string) => localizeCouponleoRoute(path, this.i18n.locale());
 
   protected readonly menuOpen = signal(false);
   protected readonly navLinks = computed<HeaderLink[]>(() => [
-    { href: '/stores', label: this.i18n.t('nav.stores') },
-    { href: '/categories', label: this.i18n.t('nav.categories') },
-    { href: '/country-deals', label: this.i18n.t('nav.countryDeals') },
-    { href: '/top-deals', label: this.i18n.t('nav.topDeals') },
-    { href: '/blog', label: this.i18n.t('nav.blog') },
+    { href: this.localizeRoute('/stores'), label: this.i18n.t('nav.stores') },
+    { href: this.localizeRoute('/categories'), label: this.i18n.t('nav.categories') },
+    { href: this.localizeRoute('/country-deals'), label: this.i18n.t('nav.countryDeals') },
+    { href: this.localizeRoute('/top-deals'), label: this.i18n.t('nav.topDeals') },
+    { href: this.localizeRoute('/blog'), label: this.i18n.t('nav.blog') },
   ]);
   protected readonly isAuthenticated = this.authService.isAuthenticated;
   protected readonly localeOptions = this.localeService.localeOptions;
@@ -321,7 +368,7 @@ export class CouponleoHeaderComponent {
   protected handleSignOut(): void {
     this.authService.signOut();
     this.closeMenu();
-    void this.router.navigateByUrl('/');
+    void this.router.navigateByUrl(this.localizeRoute('/'));
   }
 
   protected handleCountryChange(event: Event): void {

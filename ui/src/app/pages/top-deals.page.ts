@@ -7,6 +7,10 @@ import {
   CouponleoCouponDialogComponent,
   type CouponleoCouponReveal,
 } from '../components/couponleo-coupon-dialog.component';
+import {
+  CouponleoBreadcrumbsComponent,
+  type CouponleoBreadcrumbItem,
+} from '../components/couponleo-breadcrumbs.component';
 import { CouponleoBrandmarkComponent } from '../components/couponleo-brandmark.component';
 import { CouponleoEonIconComponent } from '../components/couponleo-eon-icon.component';
 import { CouponleoFavoriteButtonComponent } from '../components/couponleo-favorite-button.component';
@@ -20,21 +24,27 @@ import {
   type CouponleoStore,
 } from '../services/couponleo-api.service';
 import { createLoadingState, withHydratedRequestState } from '../services/couponleo-request-state.helpers';
-import { createStaticRouteMeta } from '../services/couponleo-route-meta';
+import { createDynamicRouteMeta } from '../services/couponleo-route-meta';
 import { CouponleoI18nService } from '../services/couponleo-i18n.service';
 import { couponleoCouponLogoUrl, couponleoStoreLogoUrl } from '../services/couponleo-logo.helpers';
 import { CouponleoSavedService } from '../services/couponleo-saved.service';
+import {
+  buildCouponleoCategoryCardDescription,
+  buildCouponleoStoreCardDescriptionForMarket,
+} from '../services/couponleo-seo-copy.helpers';
 import {
   fetchCouponleoList,
   readCouponleoQueryParam,
 } from '../services/couponleo-server-load.helpers';
 import {
+  buildCategoryRoute,
   buildCategorySummaries,
   buildCountryRouteQuery,
   buildStoreRoute,
   formatCount,
   formatExpiryLabel,
   isCouponLive,
+  localizeCouponleoRoute,
   locationFilterForCountry,
   matchesCountry,
   normalizeCountryRouteValue,
@@ -55,6 +65,7 @@ import walletIconSvg from '@eonui/icons/svg/commerce/eon-wallet.svg?raw';
 interface TopPickCard extends CouponleoCouponReveal {
   id: string;
   store: string;
+  storeRoute: string;
   offer: string;
   subtitle: string;
   expires: string;
@@ -66,6 +77,7 @@ interface TopPickCard extends CouponleoCouponReveal {
 interface BrowseDealCard extends CouponleoCouponReveal {
   id: string;
   store: string;
+  storeRoute: string;
   offer: string;
   expires: string;
   logoUrl: string;
@@ -87,16 +99,44 @@ interface DealStat {
   icon: string;
 }
 
+interface TopDealsGuideLink {
+  id: string;
+  label: string;
+  detail: string;
+  route: string;
+}
+
+interface TopDealsEditorialCopy {
+  intro: string;
+  introDetail: string;
+  strategy: string;
+  strategyDetail: string;
+  marketNote: string;
+  nextStops: string;
+  nextStopsDetail: string;
+}
+
 const heroBenefits = [
-  { title: 'Verified', copy: 'Active local deals only', icon: shieldIconSvg },
+  { title: 'Verified', copy: 'Active offers only', icon: shieldIconSvg },
   { title: 'Top Savings', copy: 'Sorted by live score', icon: discountIconSvg },
   { title: 'Daily Updates', copy: 'Search and filter ready', icon: clockIconSvg },
-  { title: 'Secure', copy: 'Safe local browsing', icon: shieldLockIconSvg },
+  { title: 'Secure', copy: 'Safer paths to checkout', icon: shieldLockIconSvg },
 ];
 
-export const routeMeta = createStaticRouteMeta({
-  title: 'Top Deals | CouponLeo',
-  description: 'Browse CouponLeo top deals with live coupons, active filters, verified offers, and country-aware browsing.',
+export const routeMeta = createDynamicRouteMeta((route) => {
+  const country = normalizeCountryRouteValue(route.queryParamMap.get('country'));
+
+  if (country === 'all') {
+    return {
+      title: 'Best Coupon Deals and Promo Codes Today | CouponLeo',
+      description: 'Browse the strongest coupon deals and promo codes right now, then narrow the list by store, category, or market until the savings feel worth using.',
+    };
+  }
+
+  return {
+    title: `Best Coupon Deals in ${country} | CouponLeo`,
+    description: `Browse the strongest coupon deals and promo codes for shoppers in ${country}, with enough brand and market context to compare before checkout.`,
+  };
 });
 
 const dealsPageSize = 4;
@@ -157,6 +197,7 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
   selector: 'app-top-deals-page',
   imports: [
     RouterLink,
+    CouponleoBreadcrumbsComponent,
     CouponleoCouponDialogComponent,
     CouponleoBrandmarkComponent,
     CouponleoEonIconComponent,
@@ -165,13 +206,15 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
     CouponleoPaginationComponent,
   ],
   template: `
+    <app-couponleo-breadcrumbs [items]="breadcrumbs()"></app-couponleo-breadcrumbs>
+
     <section class="couponleo-route-hero">
       <div class="couponleo-route-hero__copy">
         <span class="couponleo-eyebrow">{{ labels().eyebrow }}</span>
         <h1 class="couponleo-route-hero__title">{{ labels().title }}</h1>
         <p>{{ labels().description }}</p>
 
-        <form class="couponleo-searchbar" (submit)="$event.preventDefault()">
+        <form class="couponleo-searchbar" (submit)="$event.preventDefault()" data-telemetry-event="top_deals_search_submit" data-telemetry-label="Top deals search">
           <span class="couponleo-searchbar__icon" aria-hidden="true">
             <app-couponleo-eon-icon [svg]="searchIconSvg"></app-couponleo-eon-icon>
           </span>
@@ -180,9 +223,17 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
             [placeholder]="labels().searchPlaceholder"
             [attr.aria-label]="i18n.phrase('Search deals')"
             [value]="searchQuery()"
+            data-telemetry-event="top_deals_search_input"
+            data-telemetry-label="Top deals search"
             (input)="updateSearch($event)"
           >
-          <button type="submit" class="couponleo-searchbar__button" [attr.aria-label]="i18n.phrase('Search')">
+          <button
+            type="submit"
+            class="couponleo-searchbar__button"
+            [attr.aria-label]="i18n.phrase('Search')"
+            data-telemetry-event="top_deals_search_button"
+            data-telemetry-label="Top deals search"
+          >
             <app-couponleo-eon-icon [svg]="searchIconSvg"></app-couponleo-eon-icon>
           </button>
         </form>
@@ -227,34 +278,14 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
       </section>
     } @else {
       <section class="couponleo-page-section">
-        <div class="couponleo-deal-banner">
-          <div class="couponleo-deal-banner__copy">
-            <span class="couponleo-deal-banner__icon" aria-hidden="true">
-              <app-couponleo-eon-icon [svg]="discountIconSvg"></app-couponleo-eon-icon>
-            </span>
-            <div>
-            <strong>{{ labels().limitedTime }}</strong>
-            <span>{{ labels().limitedTimeCopy }}</span>
-          </div>
-          </div>
-
-          <div class="couponleo-countdown">
-            @for (item of countdown(); track item.label) {
-              <div class="couponleo-countdown__unit">
-                <strong>{{ item.value }}</strong>
-                <span>{{ item.label }}</span>
-              </div>
-            }
-          </div>
-
-          <a routerLink="/top-deals" [queryParams]="countryRouteQuery()" class="couponleo-deal-banner__button">{{ labels().viewAllLiveDeals }}</a>
-        </div>
-      </section>
-
-      <section class="couponleo-page-section">
         <div class="couponleo-section-heading">
           <h2>{{ labels().topPicks }}</h2>
-          <a routerLink="/top-deals" [queryParams]="countryRouteQuery()">{{ labels().viewFeaturedCoupons }}</a>
+          <a
+            [routerLink]="localizeRoute('/top-deals')"
+            [queryParams]="countryRouteQuery()"
+            data-telemetry-event="top_deals_featured_open_all"
+            [attr.data-telemetry-label]="labels().viewFeaturedCoupons"
+          >{{ labels().viewFeaturedCoupons }}</a>
         </div>
 
         <div class="couponleo-picks-grid">
@@ -270,7 +301,13 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
                     ></app-couponleo-brandmark>
                   </span>
                   <div class="couponleo-pick-card__header-copy">
-                    <div class="couponleo-pick-card__brand">{{ pick.store }}</div>
+                    <a
+                      class="couponleo-store-name-link couponleo-pick-card__brand"
+                      [routerLink]="localizeRoute(pick.storeRoute)"
+                      [queryParams]="countryRouteQuery()"
+                      data-telemetry-event="top_deals_pick_store_open"
+                      [attr.data-telemetry-label]="pick.store"
+                    >{{ pick.store }}</a>
                     <span class="couponleo-pick-card__offer">{{ pick.offer }}</span>
                   </div>
                 </div>
@@ -289,11 +326,23 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
                 </span>
                 <span>{{ pick.used }}</span>
               </div>
-              <button type="button" class="couponleo-code couponleo-code--masked couponleo-pick-card__code" (click)="openCoupon(pick)">
+              <button
+                type="button"
+                class="couponleo-code couponleo-code--masked couponleo-pick-card__code"
+                (click)="openCoupon(pick)"
+                data-telemetry-event="top_deals_pick_code_open"
+                [attr.data-telemetry-label]="pick.store + ' ' + pick.offer"
+              >
                 {{ maskCode(pick.code) }}
               </button>
               <span class="couponleo-pick-card__expires">{{ pick.expires }}</span>
-              <button type="button" class="couponleo-button couponleo-button--solid" (click)="openCoupon(pick)">{{ labels().claimDeal }}</button>
+              <button
+                type="button"
+                class="couponleo-button couponleo-button--solid"
+                (click)="openCoupon(pick)"
+                data-telemetry-event="top_deals_pick_claim"
+                [attr.data-telemetry-label]="pick.store + ' ' + pick.offer"
+              >{{ labels().claimDeal }}</button>
             </article>
           }
 
@@ -307,6 +356,8 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
               type="button"
               class="couponleo-chip"
               [class.is-active]="selectedCategory() === filter.value"
+              data-telemetry-event="top_deals_filter_select"
+              [attr.data-telemetry-label]="filter.label"
               (click)="selectCategory(filter.value)"
             >
               {{ filter.label }}
@@ -334,7 +385,13 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
                         [fallbackSrc]="deal.fallbackLogoUrl"
                       ></app-couponleo-brandmark>
                     </span>
-                    <span class="couponleo-deal-card__brand">{{ deal.store }}</span>
+                    <a
+                      class="couponleo-store-name-link couponleo-deal-card__brand"
+                      [routerLink]="localizeRoute(deal.storeRoute)"
+                      [queryParams]="countryRouteQuery()"
+                      data-telemetry-event="top_deals_browse_store_open"
+                      [attr.data-telemetry-label]="deal.store"
+                    >{{ deal.store }}</a>
                   </span>
                   <span class="couponleo-card-toolbar">
                     <span class="couponleo-deal-card__flag">{{ labels().verified }}</span>
@@ -349,10 +406,22 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
                 <p>{{ deal.description }}</p>
                 <span class="couponleo-browse-deal__expires">{{ deal.expires }}</span>
                 <div class="couponleo-deal-card__actions">
-                  <button type="button" class="couponleo-code couponleo-code--masked" (click)="openCoupon(deal)">
+                  <button
+                    type="button"
+                    class="couponleo-code couponleo-code--masked"
+                    (click)="openCoupon(deal)"
+                    data-telemetry-event="top_deals_browse_code_open"
+                    [attr.data-telemetry-label]="deal.store + ' ' + deal.offer"
+                  >
                     {{ maskCode(deal.code) }}
                   </button>
-                  <button type="button" class="couponleo-button couponleo-button--solid" (click)="openCoupon(deal)">
+                  <button
+                    type="button"
+                    class="couponleo-button couponleo-button--solid"
+                    (click)="openCoupon(deal)"
+                    data-telemetry-event="top_deals_browse_show_code"
+                    [attr.data-telemetry-label]="deal.store + ' ' + deal.offer"
+                  >
                     {{ i18n.phrase('Show Code') }}
                   </button>
                 </div>
@@ -378,7 +447,12 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
       <section class="couponleo-page-section">
         <div class="couponleo-section-heading">
           <h2>{{ labels().topDealsByStore }}</h2>
-          <a routerLink="/stores" [queryParams]="countryRouteQuery()">{{ labels().viewAllStores }}</a>
+          <a
+            [routerLink]="localizeRoute('/stores')"
+            [queryParams]="countryRouteQuery()"
+            data-telemetry-event="top_deals_stores_open_all"
+            [attr.data-telemetry-label]="labels().viewAllStores"
+          >{{ labels().viewAllStores }}</a>
         </div>
 
         <div class="couponleo-store-rail">
@@ -389,7 +463,15 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
                   <span class="couponleo-store-rail__brandmark" aria-hidden="true">
                     <app-couponleo-brandmark [name]="store.name" [src]="store.logoUrl"></app-couponleo-brandmark>
                   </span>
-                  <strong>{{ store.name }}</strong>
+                  <strong>
+                    <a
+                      class="couponleo-store-name-link"
+                      [routerLink]="localizeRoute(store.route)"
+                      [queryParams]="countryRouteQuery()"
+                      data-telemetry-event="top_deals_store_name_open"
+                      [attr.data-telemetry-label]="store.name"
+                    >{{ store.name }}</a>
+                  </strong>
                 </div>
                 <app-couponleo-favorite-button
                   [active]="isSaved(store.id)"
@@ -398,7 +480,13 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
                 ></app-couponleo-favorite-button>
               </div>
               <span>{{ store.count }}</span>
-              <a class="couponleo-store-rail__link" [routerLink]="store.route" [queryParams]="countryRouteQuery()">{{ labels().viewDeals }}</a>
+              <a
+                class="couponleo-store-rail__link"
+                [routerLink]="localizeRoute(store.route)"
+                [queryParams]="countryRouteQuery()"
+                data-telemetry-event="top_deals_store_open"
+                [attr.data-telemetry-label]="store.name"
+              >{{ labels().viewDeals }}</a>
             </article>
           }
         </div>
@@ -417,6 +505,46 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
               </div>
             </div>
           }
+        </div>
+      </section>
+
+      <section class="couponleo-page-section couponleo-copy-section">
+        <div class="couponleo-section-heading couponleo-section-heading--stacked">
+          <h2>{{ labels().topDealsGuideTitle }}</h2>
+          <p>{{ editorialCopy().intro }}</p>
+          <p>{{ editorialCopy().introDetail }}</p>
+        </div>
+
+        <div class="couponleo-top-deals-copy-grid">
+          <article class="couponleo-copy-card">
+            <h3>{{ labels().narrowDealsTitle }}</h3>
+            <p>{{ editorialCopy().strategy }}</p>
+            <p>{{ editorialCopy().strategyDetail }}</p>
+            <p>{{ editorialCopy().marketNote }}</p>
+          </article>
+
+          <article class="couponleo-copy-card">
+            <h3>{{ labels().nextStopsTitle }}</h3>
+            <p>{{ editorialCopy().nextStops }}</p>
+            <p>{{ editorialCopy().nextStopsDetail }}</p>
+
+            @if (guideLinks().length > 0) {
+              <div class="couponleo-copy-card__links">
+                @for (link of guideLinks(); track link.id) {
+                  <a
+                    class="couponleo-copy-link"
+                    [routerLink]="localizeRoute(link.route)"
+                    [queryParams]="countryRouteQuery()"
+                    data-telemetry-event="top_deals_guide_link"
+                    [attr.data-telemetry-label]="link.label"
+                  >
+                    <strong>{{ link.label }}</strong>
+                    <span>{{ link.detail }}</span>
+                  </a>
+                }
+              </div>
+            }
+          </article>
         </div>
       </section>
     }
@@ -471,6 +599,12 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
       min-height: 30rem;
     }
 
+    .couponleo-top-deals-copy-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+      gap: 18px;
+    }
+
     .couponleo-route-hero__image {
       right: 2%;
       bottom: 2%;
@@ -486,92 +620,6 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
       right: 3%;
       bottom: 3%;
       width: min(90%, 34rem);
-    }
-
-    .couponleo-deal-banner {
-      display: grid;
-      grid-template-columns: auto auto minmax(240px, auto);
-      align-items: center;
-      gap: 20px;
-      padding: 18px 22px;
-      border-radius: 22px;
-      background: linear-gradient(90deg, #ff6b1e 0%, #ff8a2f 58%, #ffb14a 100%);
-      box-shadow: 0 18px 36px rgba(255, 122, 61, 0.24);
-    }
-
-    .couponleo-deal-banner__copy {
-      display: inline-flex;
-      align-items: center;
-      gap: 14px;
-      color: #fff;
-    }
-
-    .couponleo-deal-banner__copy strong,
-    .couponleo-deal-banner__copy span {
-      display: block;
-    }
-
-    .couponleo-deal-banner__copy strong {
-      font-size: 1.4rem;
-      line-height: 1.04;
-    }
-
-    .couponleo-deal-banner__copy span {
-      opacity: 0.94;
-    }
-
-    .couponleo-deal-banner__icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 3rem;
-      height: 3rem;
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.18);
-      color: #fff;
-    }
-
-    .couponleo-deal-banner__icon app-couponleo-eon-icon {
-      width: 1.4rem;
-      height: 1.4rem;
-    }
-
-    .couponleo-countdown {
-      display: inline-flex;
-      gap: 10px;
-      justify-self: center;
-    }
-
-    .couponleo-countdown__unit {
-      display: grid;
-      justify-items: center;
-      min-width: 72px;
-      padding: 10px 12px;
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.96);
-      color: var(--couponleo-navy);
-    }
-
-    .couponleo-countdown__unit strong {
-      font-size: 1.8rem;
-      line-height: 1;
-    }
-
-    .couponleo-countdown__unit span {
-      font-size: 0.72rem;
-      font-weight: 800;
-      letter-spacing: 0.08em;
-    }
-
-    .couponleo-deal-banner__button {
-      justify-self: end;
-      min-height: 48px;
-      padding: 0 22px;
-      border: 1px solid rgba(255, 255, 255, 0.72);
-      border-radius: 14px;
-      color: #fff;
-      font-weight: 800;
-      white-space: nowrap;
     }
 
     .couponleo-picks-grid {
@@ -869,16 +917,6 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
         grid-template-columns: 1fr;
       }
 
-      .couponleo-deal-banner {
-        grid-template-columns: 1fr;
-        justify-items: start;
-      }
-
-      .couponleo-countdown,
-      .couponleo-deal-banner__button {
-        justify-self: start;
-      }
-
       .couponleo-picks-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
@@ -889,6 +927,10 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
 
       .couponleo-inline-stats--five {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .couponleo-top-deals-copy-grid {
+        grid-template-columns: 1fr;
       }
     }
 
@@ -914,16 +956,6 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
       .couponleo-store-rail,
       .couponleo-inline-stats--five {
         grid-template-columns: 1fr;
-      }
-
-      .couponleo-countdown {
-        width: 100%;
-        justify-content: space-between;
-      }
-
-      .couponleo-countdown__unit {
-        min-width: 0;
-        flex: 1 1 0;
       }
 
       .couponleo-pick-card__brandmark {
@@ -1001,16 +1033,14 @@ export default class TopDealsPage {
   protected readonly searchQuery = signal('');
   protected readonly selectedCountry = toSignal(this.countryQueryParamMap, { initialValue: this.initialCountry });
   protected readonly countryRouteQuery = computed(() => buildCountryRouteQuery(this.selectedCountry()));
+  protected readonly localizeRoute = (path: string) => localizeCouponleoRoute(path, this.i18n.locale());
   protected readonly selectedCategory = signal('all');
   protected readonly dealPage = signal(1);
   protected readonly labels = computed(() => ({
     eyebrow: this.i18n.phrase('Top Deals'),
     title: this.i18n.phrase('Top Deals'),
-    description: this.i18n.phrase('Live coupon inventory from the local API with active-only filtering, category chips, and client-side pagination.'),
+    description: this.i18n.phrase('Start with the offers that look strongest right now, then narrow the list until the savings match what you would actually buy.'),
     searchPlaceholder: this.i18n.phrase('Search deals, stores or categories'),
-    limitedTime: this.i18n.phrase('Limited Time'),
-    limitedTimeCopy: this.i18n.phrase('Based on the soonest live coupon expiry in the local dataset.'),
-    viewAllLiveDeals: this.i18n.phrase('View All Live Deals'),
     topPicks: this.i18n.phrase('Top Picks'),
     viewFeaturedCoupons: this.i18n.phrase('View featured coupons'),
     verified: this.i18n.phrase('Verified'),
@@ -1031,6 +1061,9 @@ export default class TopDealsPage {
     activeNow: this.i18n.phrase('Active Now'),
     featured: this.i18n.phrase('Featured'),
     markets: this.i18n.phrase('Markets'),
+    topDealsGuideTitle: this.i18n.phrase('How to read today\'s strongest deals'),
+    narrowDealsTitle: this.i18n.phrase('How to separate real value from filler'),
+    nextStopsTitle: this.i18n.phrase('Where to go after a deal catches your eye'),
   }));
   protected readonly isLoading = computed(() => (
     this.categoriesState().loading
@@ -1083,34 +1116,6 @@ export default class TopDealsPage {
     return this.countryCouponTotal() > 0 || this.countryStoreTotal() > 0 ? 1 : 0;
   });
 
-  protected readonly countdown = computed(() => {
-    const countdownCoupons = this.searchQuery().trim() || this.selectedCategory() !== 'all'
-      ? this.filteredDeals()
-      : this.countryCoupons();
-    const soonestCoupon = [...countdownCoupons]
-      .filter((coupon) => coupon.expiresAt)
-      .sort((left, right) => left.expiresAt.localeCompare(right.expiresAt))[0];
-
-    if (!soonestCoupon) {
-      return [
-        { value: '0', label: this.i18n.phrase('DAYS') },
-        { value: '0', label: this.i18n.phrase('HRS') },
-        { value: '0', label: this.i18n.phrase('MINS') },
-      ];
-    }
-
-    const expiry = new Date(`${soonestCoupon.expiresAt}T23:59:59`);
-    const difference = Math.max(expiry.getTime() - Date.now(), 0);
-    const totalMinutes = Math.floor(difference / (1000 * 60));
-    const totalHours = Math.floor(totalMinutes / 60);
-
-    return [
-      { value: String(Math.floor(totalHours / 24)), label: this.i18n.phrase('DAYS') },
-      { value: String(totalHours % 24).padStart(2, '0'), label: this.i18n.phrase('HRS') },
-      { value: String(totalMinutes % 60).padStart(2, '0'), label: this.i18n.phrase('MINS') },
-    ];
-  });
-
   protected readonly topPicks = computed<TopPickCard[]>(() => {
     const topPickSource = this.searchQuery().trim() || this.selectedCategory() !== 'all'
       ? this.filteredDeals()
@@ -1132,6 +1137,7 @@ export default class TopDealsPage {
         expires: formatExpiryLabel(coupon.expiresAt),
         code: coupon.code,
         route: '/top-deals',
+        storeRoute: this.localizeRoute(buildStoreRoute(coupon.storeSlug)),
         logoUrl: couponleoCouponLogoUrl(coupon),
         fallbackLogoUrl: coupon.image_url ?? '',
       }));
@@ -1158,6 +1164,7 @@ export default class TopDealsPage {
       code: coupon.code,
       route: '/top-deals',
       store: coupon.storeName,
+      storeRoute: this.localizeRoute(buildStoreRoute(coupon.storeSlug)),
       offer: coupon.discountText,
       expires: formatExpiryLabel(coupon.expiresAt),
       logoUrl: couponleoCouponLogoUrl(coupon),
@@ -1173,11 +1180,56 @@ export default class TopDealsPage {
         id: `store-${store.slug}`,
         name: store.name,
         count: `${this.i18n.formatNumber(store.activeCoupons)} ${this.i18n.phrase('live deals')}`,
-        description: store.headline,
-        route: buildStoreRoute(store.slug),
+        description: buildCouponleoStoreCardDescriptionForMarket(store, this.selectedCountry()),
+        route: this.localizeRoute(buildStoreRoute(store.slug)),
         logoUrl: couponleoStoreLogoUrl(store),
       }))
   ));
+
+  protected readonly breadcrumbs = computed<CouponleoBreadcrumbItem[]>(() => [
+    { label: 'CouponLeo', href: this.localizeRoute('/') },
+    { label: this.labels().title },
+  ]);
+
+  protected readonly guideLinks = computed<TopDealsGuideLink[]>(() => {
+    const categoryLinks = buildCategorySummaries(this.countryCoupons(), this.categoriesResponse().items)
+      .slice(0, 2)
+      .map((category) => ({
+        id: `category-${category.slug}`,
+        label: category.name,
+        detail: buildCouponleoCategoryCardDescription({
+          name: category.name,
+          headline: category.headline,
+          description: category.headline,
+        }),
+        route: this.localizeRoute(buildCategoryRoute(category.slug)),
+      }));
+
+    const storeLinks = this.storeDeals().slice(0, 2).map((store) => ({
+      id: store.id,
+      label: store.name,
+      detail: store.description,
+      route: store.route,
+    }));
+
+    return [...categoryLinks, ...storeLinks].slice(0, 4);
+  });
+
+  protected readonly editorialCopy = computed<TopDealsEditorialCopy>(() => ({
+    intro: this.selectedCountry() === 'all'
+      ? this.i18n.phrase('Top Deals works best as a shortlist, not a final answer. Scan the best-looking savings first, then pressure-test them against the store or category before you commit.')
+      : `${this.i18n.phrase('You are browsing')} ${this.selectedCountry()}, ${this.i18n.phrase('so this deals list is already closer to the brands, stock conditions, and promo patterns that matter in that market.')}`,
+    introDetail: this.selectedCountry() === 'all'
+      ? `${this.i18n.formatNumber(this.countryCouponTotal())} ${this.i18n.phrase('live offers are easier to compare when this page acts as the first filter instead of the last click.')}`
+      : this.i18n.phrase('That makes it easier to judge whether a coupon is truly relevant or just broadly visible while being locally weak.'),
+    strategy: this.i18n.phrase('Start with the headline saving, but read it alongside the merchant name, category, and expiry cues before treating it as the best option on the page.'),
+    strategyDetail: this.i18n.phrase('A strong deal card should make you curious enough to click deeper, not confident enough to stop comparing after one glance. The real winner is often the offer backed by a merchant that is discounting with depth, not just shouting the loudest.'),
+    marketNote: this.selectedCountry() === 'all'
+      ? this.i18n.phrase('When something looks promising, open the matching store to see whether the merchant has depth behind it, then use the category when you want to compare the same buying intent across competing brands.')
+      : `${this.i18n.phrase('Keeping the market fixed to')} ${this.selectedCountry()} ${this.i18n.phrase('is useful when delivery costs, excluded products, or region-specific promo rules can quietly change the real value of a discount.')}`,
+    nextStops: this.i18n.phrase('The best follow-up click depends on the question in your head: go to the store when you want to judge one brand more closely, or move into the category when you want to compare similar savings across several merchants.'),
+    nextStopsDetail: this.i18n.phrase('Used that way, this page becomes a strong first filter instead of a dead-end list of isolated offers. It helps you move from raw deal discovery into a smaller, smarter shortlist.'),
+  }));
 
   protected readonly stats = computed<DealStat[]>(() => {
     const featuredCoupons = this.countryCoupons().filter((coupon) => coupon.featured).length;

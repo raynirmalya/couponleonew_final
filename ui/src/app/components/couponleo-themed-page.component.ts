@@ -1,6 +1,7 @@
 import { Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CouponleoI18nService } from '../services/couponleo-i18n.service';
+import { localizeCouponleoRoute } from '../services/couponleo-ui.helpers';
 
 type CouponleoPageLayout = 'default' | 'help' | 'legal';
 type CouponleoSectionVariant = 'cards' | 'list' | 'legal';
@@ -121,8 +122,10 @@ export interface CouponleoThemedPageConfig {
                       <a
                         class="couponleo-themed-page__nav-link"
                         [class.is-active]="link.active"
-                        [routerLink]="link.href"
+                        [routerLink]="localizeRoute(link.href)"
                         queryParamsHandling="preserve"
+                        data-telemetry-event="themed_page_nav_link"
+                        [attr.data-telemetry-label]="link.label"
                       >
                         {{ link.label }}
                       </a>
@@ -141,8 +144,10 @@ export interface CouponleoThemedPageConfig {
                     @for (action of localizedConfig().actions; track action.href) {
                       <a
                         [class]="actionClass(action)"
-                        [routerLink]="action.href"
+                        [routerLink]="localizeRoute(action.href)"
                         queryParamsHandling="preserve"
+                        data-telemetry-event="themed_page_action_link"
+                        [attr.data-telemetry-label]="action.label"
                       >
                         {{ action.label }}
                       </a>
@@ -157,8 +162,10 @@ export interface CouponleoThemedPageConfig {
                     <a
                       class="couponleo-themed-page__nav-link"
                       [class.is-active]="link.active"
-                      [routerLink]="link.href"
+                      [routerLink]="localizeRoute(link.href)"
                       queryParamsHandling="preserve"
+                      data-telemetry-event="themed_page_nav_link"
+                      [attr.data-telemetry-label]="link.label"
                     >
                       {{ link.label }}
                     </a>
@@ -171,8 +178,10 @@ export interface CouponleoThemedPageConfig {
                   @for (action of localizedConfig().actions; track action.href) {
                     <a
                       [class]="actionClass(action)"
-                      [routerLink]="action.href"
+                      [routerLink]="localizeRoute(action.href)"
                       queryParamsHandling="preserve"
+                      data-telemetry-event="themed_page_action_link"
+                      [attr.data-telemetry-label]="action.label"
                     >
                       {{ action.label }}
                     </a>
@@ -235,7 +244,13 @@ export interface CouponleoThemedPageConfig {
                           <small class="couponleo-themed-page__meta">{{ card.meta }}</small>
                         }
                         @if (card.href) {
-                          <a class="couponleo-themed-page__cta" [routerLink]="card.href" queryParamsHandling="preserve">
+                          <a
+                            class="couponleo-themed-page__cta"
+                            [routerLink]="localizeRoute(card.href)"
+                            queryParamsHandling="preserve"
+                            data-telemetry-event="themed_page_card_cta"
+                            [attr.data-telemetry-label]="card.cta ?? card.title"
+                          >
                             {{ card.cta ?? labels.openPage }}
                           </a>
                         }
@@ -264,7 +279,13 @@ export interface CouponleoThemedPageConfig {
                         <small class="couponleo-themed-page__meta">{{ card.meta }}</small>
                       }
                       @if (card.href) {
-                        <a class="couponleo-themed-page__cta" [routerLink]="card.href" queryParamsHandling="preserve">
+                        <a
+                          class="couponleo-themed-page__cta"
+                          [routerLink]="localizeRoute(card.href)"
+                          queryParamsHandling="preserve"
+                          data-telemetry-event="themed_page_card_cta"
+                          [attr.data-telemetry-label]="card.cta ?? card.title"
+                        >
                           {{ card.cta ?? labels.openPage }}
                         </a>
                       }
@@ -939,6 +960,10 @@ export class CouponleoThemedPageComponent {
   protected railTitle(): string {
     return this.localizedConfig().navTitle
       ?? (this.isHelpLayout() ? this.labels.supportPages : this.labels.relatedPages);
+  }
+
+  protected localizeRoute(path: string): string {
+    return localizeCouponleoRoute(path, this.i18n.locale());
   }
 
   protected sectionId(section: CouponleoThemedPageSection): string {

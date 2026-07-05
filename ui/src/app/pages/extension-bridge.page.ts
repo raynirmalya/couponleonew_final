@@ -1,7 +1,9 @@
 import { Component, inject } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
+import { CouponleoLocaleService } from '../services/couponleo-locale.service';
 import { createStaticRouteMeta } from '../services/couponleo-route-meta';
+import { localizeCouponleoRoute } from '../services/couponleo-ui.helpers';
 
 export const routeMeta = createStaticRouteMeta({
   title: 'Extension Bridge | CouponLeo',
@@ -40,8 +42,8 @@ export const routeMeta = createStaticRouteMeta({
         </p>
 
         <div class="couponleo-extension-bridge__actions">
-          <a routerLink="/dashboard">Open dashboard</a>
-          <a routerLink="/top-deals">Browse deals</a>
+          <a [routerLink]="localizeRoute('/dashboard')">Open dashboard</a>
+          <a [routerLink]="localizeRoute('/top-deals')">Browse deals</a>
         </div>
       </article>
     </section>
@@ -141,7 +143,9 @@ export const routeMeta = createStaticRouteMeta({
 })
 export default class ExtensionBridgePage {
   private readonly route = inject(ActivatedRoute);
+  private readonly localeService = inject(CouponleoLocaleService);
 
   protected readonly email = (this.route.snapshot.queryParamMap.get('email') ?? '').trim();
   protected readonly provider = (this.route.snapshot.queryParamMap.get('provider') ?? '').trim();
+  protected readonly localizeRoute = (path: string) => localizeCouponleoRoute(path, this.localeService.locale());
 }

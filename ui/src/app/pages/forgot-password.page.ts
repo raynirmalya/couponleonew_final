@@ -6,7 +6,10 @@ import {
   CouponleoAuthService,
   type CouponleoPasswordResetRequestResult,
 } from '../services/couponleo-auth.service';
+import { CouponleoI18nService } from '../services/couponleo-i18n.service';
+import { CouponleoLocaleService } from '../services/couponleo-locale.service';
 import { createStaticRouteMeta } from '../services/couponleo-route-meta';
+import { localizeCouponleoRoute } from '../services/couponleo-ui.helpers';
 
 import envelopeIconSvg from '@eonui/icons/svg/communication/eon-envelope-simple.svg?raw';
 import eyeIconSvg from '@eonui/icons/svg/system/eon-eye.svg?raw';
@@ -25,12 +28,12 @@ export const routeMeta = createStaticRouteMeta({
   template: `
     <section class="couponleo-recovery">
       <article class="couponleo-recovery__card">
-        <p class="couponleo-recovery__eyebrow">Account recovery</p>
-        <h1>{{ resetMode() ? 'Create a new password' : 'Forgot your password?' }}</h1>
+        <p class="couponleo-recovery__eyebrow">{{ i18n.phrase('Account recovery') }}</p>
+        <h1>{{ resetMode() ? i18n.phrase('Create a new password') : i18n.phrase('Forgot your password?') }}</h1>
         <p class="couponleo-recovery__lede">
           {{ resetMode()
-            ? 'Use the password reset link from your email and set a fresh password for your CouponLeo account.'
-            : 'Enter your email address and we will prepare a password reset link for your CouponLeo account.' }}
+            ? i18n.phrase('Use the password reset link from your email and set a fresh password for your CouponLeo account.')
+            : i18n.phrase('Enter your email address and we will prepare a password reset link for your CouponLeo account.') }}
         </p>
 
         @if (statusMessage()) {
@@ -48,7 +51,7 @@ export const routeMeta = createStaticRouteMeta({
         @if (!resetMode()) {
           <form class="couponleo-recovery__form" (ngSubmit)="handleRequestReset()">
             <label class="couponleo-recovery__field">
-              <span>Email address</span>
+              <span>{{ i18n.phrase('Email address') }}</span>
               <span class="couponleo-recovery__input-shell">
                 <span class="couponleo-recovery__input-icon" aria-hidden="true">
                   <app-couponleo-eon-icon [svg]="envelopeIconSvg"></app-couponleo-eon-icon>
@@ -58,7 +61,7 @@ export const routeMeta = createStaticRouteMeta({
                   name="email"
                   [(ngModel)]="requestForm.email"
                   autocomplete="email"
-                  placeholder="name@example.com"
+                  [placeholder]="i18n.phrase('Enter your email')"
                   required
                 >
               </span>
@@ -69,23 +72,23 @@ export const routeMeta = createStaticRouteMeta({
               class="couponleo-recovery__submit"
               [disabled]="requestBusy() || !requestForm.email.trim()"
             >
-              {{ requestBusy() ? 'Preparing reset link...' : 'Send reset link' }}
+              {{ requestBusy() ? i18n.phrase('Preparing reset link...') : i18n.phrase('Send reset link') }}
             </button>
           </form>
 
           @if (requestState()?.resetReady && requestState()?.resetUrl) {
             <div class="couponleo-recovery__preview">
-              <strong>Local reset link ready</strong>
+              <strong>{{ i18n.phrase('Local reset link ready') }}</strong>
               <p>{{ requestState()?.deliveryMessage }}</p>
-              <a class="couponleo-recovery__action couponleo-recovery__action--solid" [href]="requestState()?.resetUrl || '/forgot-password'">
-                Open reset link
+              <a class="couponleo-recovery__action couponleo-recovery__action--solid" [href]="requestState()?.resetUrl || localizeRoute('/forgot-password')">
+                {{ i18n.phrase('Open reset link') }}
               </a>
             </div>
           }
         } @else {
           <form class="couponleo-recovery__form" (ngSubmit)="handleResetPassword()">
             <label class="couponleo-recovery__field">
-              <span>Email address</span>
+              <span>{{ i18n.phrase('Email address') }}</span>
               <span class="couponleo-recovery__input-shell">
                 <span class="couponleo-recovery__input-icon" aria-hidden="true">
                   <app-couponleo-eon-icon [svg]="envelopeIconSvg"></app-couponleo-eon-icon>
@@ -95,14 +98,14 @@ export const routeMeta = createStaticRouteMeta({
                   name="resetEmail"
                   [(ngModel)]="resetForm.email"
                   autocomplete="email"
-                  placeholder="name@example.com"
+                  [placeholder]="i18n.phrase('Enter your email')"
                   required
                 >
               </span>
             </label>
 
             <label class="couponleo-recovery__field">
-              <span>New password</span>
+              <span>{{ i18n.phrase('New password') }}</span>
               <span class="couponleo-recovery__input-shell">
                 <span class="couponleo-recovery__input-icon" aria-hidden="true">
                   <app-couponleo-eon-icon [svg]="lockIconSvg"></app-couponleo-eon-icon>
@@ -112,13 +115,13 @@ export const routeMeta = createStaticRouteMeta({
                   name="password"
                   [(ngModel)]="resetForm.password"
                   autocomplete="new-password"
-                  placeholder="Enter a new password"
+                  [placeholder]="i18n.phrase('Enter a new password')"
                   required
                 >
                 <button
                   type="button"
                   class="couponleo-recovery__visibility"
-                  aria-label="Toggle password visibility"
+                  [attr.aria-label]="i18n.phrase('Toggle password visibility')"
                   (click)="togglePassword()"
                 >
                   <app-couponleo-eon-icon [svg]="showPassword() ? eyeOffIconSvg : eyeIconSvg"></app-couponleo-eon-icon>
@@ -127,7 +130,7 @@ export const routeMeta = createStaticRouteMeta({
             </label>
 
             <label class="couponleo-recovery__field">
-              <span>Confirm password</span>
+              <span>{{ i18n.phrase('Confirm password') }}</span>
               <span class="couponleo-recovery__input-shell">
                 <span class="couponleo-recovery__input-icon" aria-hidden="true">
                   <app-couponleo-eon-icon [svg]="lockIconSvg"></app-couponleo-eon-icon>
@@ -137,7 +140,7 @@ export const routeMeta = createStaticRouteMeta({
                   name="confirmPassword"
                   [(ngModel)]="resetForm.confirmPassword"
                   autocomplete="new-password"
-                  placeholder="Re-enter your new password"
+                  [placeholder]="i18n.phrase('Re-enter your new password')"
                   required
                 >
               </span>
@@ -145,7 +148,7 @@ export const routeMeta = createStaticRouteMeta({
 
             @if (resetForm.confirmPassword.trim() && resetForm.password !== resetForm.confirmPassword) {
               <p class="couponleo-recovery__notice couponleo-recovery__notice--error">
-                Password and confirm password must match.
+                {{ i18n.phrase('Password and confirm password must match.') }}
               </p>
             }
 
@@ -154,7 +157,7 @@ export const routeMeta = createStaticRouteMeta({
               class="couponleo-recovery__submit"
               [disabled]="resetBusy() || !resetForm.email.trim() || !resetForm.password.trim() || !resetForm.confirmPassword.trim() || resetForm.password !== resetForm.confirmPassword"
             >
-              {{ resetBusy() ? 'Saving new password...' : 'Reset password' }}
+              {{ resetBusy() ? i18n.phrase('Saving new password...') : i18n.phrase('Reset password') }}
             </button>
           </form>
         }
@@ -162,17 +165,17 @@ export const routeMeta = createStaticRouteMeta({
         <div class="couponleo-recovery__footer">
           <a
             class="couponleo-recovery__action couponleo-recovery__action--ghost"
-            routerLink="/sign-in"
+            [routerLink]="localizeRoute('/sign-in')"
             [queryParams]="signInQueryParams()"
           >
-            Back to sign in
+            {{ i18n.phrase('Back to sign in') }}
           </a>
           <a
             class="couponleo-recovery__action couponleo-recovery__action--ghost"
-            routerLink="/sign-up"
+            [routerLink]="localizeRoute('/sign-up')"
             [queryParams]="signUpQueryParams()"
           >
-            Create account
+            {{ i18n.phrase('Create account') }}
           </a>
         </div>
       </article>
@@ -369,11 +372,14 @@ export const routeMeta = createStaticRouteMeta({
 export default class ForgotPasswordPage {
   private readonly authService = inject(CouponleoAuthService);
   private readonly route = inject(ActivatedRoute);
+  protected readonly i18n = inject(CouponleoI18nService);
+  private readonly localeService = inject(CouponleoLocaleService);
 
   protected readonly envelopeIconSvg = envelopeIconSvg;
   protected readonly lockIconSvg = lockIconSvg;
   protected readonly eyeIconSvg = eyeIconSvg;
   protected readonly eyeOffIconSvg = eyeOffIconSvg;
+  protected readonly localizeRoute = (path: string) => localizeCouponleoRoute(path, this.localeService.locale());
 
   protected readonly resetMode = signal(false);
   protected readonly requestBusy = signal(false);
@@ -408,7 +414,7 @@ export default class ForgotPasswordPage {
       this.resetMode.set(true);
       this.resetToken = resetToken;
       if (!email) {
-        this.errorMessage.set('Reset link is missing the account email. Please request a fresh password reset.');
+        this.errorMessage.set(this.i18n.phrase('Reset link is missing the account email. Please request a fresh password reset.'));
       }
     }
   }
@@ -436,7 +442,7 @@ export default class ForgotPasswordPage {
       this.requestState.set(result);
       this.statusMessage.set(result.message);
     } catch (error) {
-      this.errorMessage.set(this.authService.errorMessage(error, 'We could not prepare a reset link right now.'));
+      this.errorMessage.set(this.authService.errorMessage(error, this.i18n.phrase('We could not prepare a reset link right now.')));
     } finally {
       this.requestBusy.set(false);
     }
@@ -451,12 +457,12 @@ export default class ForgotPasswordPage {
     }
 
     if (!this.resetToken) {
-      this.errorMessage.set('Reset link is missing. Please request a fresh password reset.');
+      this.errorMessage.set(this.i18n.phrase('Reset link is missing. Please request a fresh password reset.'));
       return;
     }
 
     if (this.resetForm.password !== this.resetForm.confirmPassword) {
-      this.errorMessage.set('Password and confirm password must match.');
+      this.errorMessage.set(this.i18n.phrase('Password and confirm password must match.'));
       return;
     }
 
@@ -470,7 +476,7 @@ export default class ForgotPasswordPage {
       });
       this.statusMessage.set(result.message);
     } catch (error) {
-      this.errorMessage.set(this.authService.errorMessage(error, 'We could not reset your password right now.'));
+      this.errorMessage.set(this.authService.errorMessage(error, this.i18n.phrase('We could not reset your password right now.')));
     } finally {
       this.resetBusy.set(false);
     }

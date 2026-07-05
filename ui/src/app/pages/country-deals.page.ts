@@ -16,8 +16,13 @@ import {
   type CouponleoStore,
 } from '../services/couponleo-api.service';
 import { createLoadingState, withHydratedRequestState } from '../services/couponleo-request-state.helpers';
-import { createStaticRouteMeta } from '../services/couponleo-route-meta';
+import { createDynamicRouteMeta } from '../services/couponleo-route-meta';
 import { couponleoStoreLogoUrl } from '../services/couponleo-logo.helpers';
+import {
+  buildCouponleoCategoryCardDescription,
+  buildCouponleoStoreCardDescriptionForMarket,
+  resolveCouponleoLocationSpotlight,
+} from '../services/couponleo-seo-copy.helpers';
 import {
   fetchCouponleoList,
   readCouponleoQueryParam,
@@ -30,6 +35,7 @@ import {
   formatCount,
   getCategoryPresentation,
   isCouponLive,
+  localizeCouponleoRoute,
   locationFilterForCountry,
   matchesCountry,
   normalizeCountryRouteValue,
@@ -114,9 +120,20 @@ const countryMarketPageSize = 12;
 const countryCategoryPageSize = 12;
 const countryStorePageSize = 12;
 
-export const routeMeta = createStaticRouteMeta({
-  title: 'Country Deals | CouponLeo',
-  description: 'Explore CouponLeo deals by market with country-specific categories, stores, and live offer coverage.',
+export const routeMeta = createDynamicRouteMeta((route) => {
+  const country = normalizeCountryRouteValue(route.queryParamMap.get('country'));
+
+  if (country === 'all') {
+    return {
+      title: 'Country and Market Deals | CouponLeo',
+      description: 'Compare countries and markets to see where the store mix, category coverage, and live savings feel strongest before you narrow your shopping plan.',
+    };
+  }
+
+  return {
+    title: `${country} Deals and Coupon Offers | CouponLeo`,
+    description: `See which stores, coupon offers, and shopping categories look most worthwhile for shoppers in ${country}.`,
+  };
 });
 
 @Component({
@@ -143,8 +160,19 @@ export const routeMeta = createStaticRouteMeta({
           </div>
 
           <div class="couponleo-country-deals-hero__actions">
-            <a class="couponleo-button couponleo-button--ghost" routerLink="/categories">{{ i18n.t('countryDeals.browseGlobalCategories') }}</a>
-            <a class="couponleo-button couponleo-button--solid" routerLink="/top-deals" [queryParams]="countryRouteQuery()">{{ i18n.t('countryDeals.viewDeals') }}</a>
+            <a
+              class="couponleo-button couponleo-button--ghost"
+              [routerLink]="localizeRoute('/categories')"
+              data-telemetry-event="country_deals_browse_categories"
+              [attr.data-telemetry-label]="i18n.t('countryDeals.browseGlobalCategories')"
+            >{{ i18n.t('countryDeals.browseGlobalCategories') }}</a>
+            <a
+              class="couponleo-button couponleo-button--solid"
+              [routerLink]="localizeRoute('/top-deals')"
+              [queryParams]="countryRouteQuery()"
+              data-telemetry-event="country_deals_view_deals"
+              [attr.data-telemetry-label]="selectedCountryLabel()"
+            >{{ i18n.t('countryDeals.viewDeals') }}</a>
           </div>
         </div>
 
@@ -184,6 +212,8 @@ export const routeMeta = createStaticRouteMeta({
                 type="button"
                 class="couponleo-country-market-card__surface"
                 (click)="selectCountry(market.value)"
+                data-telemetry-event="country_deals_market_select"
+                [attr.data-telemetry-label]="market.name"
               >
                 <span class="couponleo-card__badge" aria-hidden="true">
                   <app-couponleo-eon-icon [svg]="market.icon"></app-couponleo-eon-icon>
@@ -197,8 +227,10 @@ export const routeMeta = createStaticRouteMeta({
               </button>
               <a
                 class="couponleo-country-market-card__view-link"
-                routerLink="/top-deals"
+                [routerLink]="localizeRoute('/top-deals')"
                 [queryParams]="buildCountryQuery(market.value)"
+                data-telemetry-event="country_deals_market_view_deals"
+                [attr.data-telemetry-label]="market.name"
               >
                 {{ i18n.t('countryDeals.viewDeals') }}
               </a>
@@ -220,7 +252,11 @@ export const routeMeta = createStaticRouteMeta({
       <section class="couponleo-page-section">
         <div class="couponleo-section-heading">
           <h2>{{ i18n.t('countryDeals.categoriesIn', { country: selectedCountryLabel() }) }}</h2>
-          <a routerLink="/categories">{{ i18n.t('countryDeals.browseGlobalDirectory') }}</a>
+          <a
+            [routerLink]="localizeRoute('/categories')"
+            data-telemetry-event="country_deals_categories_directory"
+            [attr.data-telemetry-label]="i18n.t('countryDeals.browseGlobalDirectory')"
+          >{{ i18n.t('countryDeals.browseGlobalDirectory') }}</a>
         </div>
 
         @if (pagedCategoryCards().length > 0) {
@@ -236,7 +272,13 @@ export const routeMeta = createStaticRouteMeta({
                   <span>{{ category.deals }}</span>
                   <span>{{ category.stores }}</span>
                 </div>
-                <a class="couponleo-button couponleo-button--ghost" [routerLink]="category.route" [queryParams]="countryRouteQuery()">
+                <a
+                  class="couponleo-button couponleo-button--ghost"
+                  [routerLink]="localizeRoute(category.route)"
+                  [queryParams]="countryRouteQuery()"
+                  data-telemetry-event="country_deals_category_open"
+                  [attr.data-telemetry-label]="category.name"
+                >
                   {{ i18n.t('countryDeals.exploreDeals') }}
                 </a>
               </article>
@@ -263,7 +305,12 @@ export const routeMeta = createStaticRouteMeta({
       <section class="couponleo-page-section">
         <div class="couponleo-section-heading">
           <h2>{{ i18n.t('countryDeals.storesIn', { country: selectedCountryLabel() }) }}</h2>
-          <a routerLink="/stores" [queryParams]="countryRouteQuery()">{{ i18n.t('countryDeals.openStoreDirectory') }}</a>
+          <a
+            [routerLink]="localizeRoute('/stores')"
+            [queryParams]="countryRouteQuery()"
+            data-telemetry-event="country_deals_store_directory"
+            [attr.data-telemetry-label]="i18n.t('countryDeals.openStoreDirectory')"
+          >{{ i18n.t('countryDeals.openStoreDirectory') }}</a>
         </div>
 
         @if (pagedStoreCards().length > 0) {
@@ -276,14 +323,28 @@ export const routeMeta = createStaticRouteMeta({
                       <app-couponleo-brandmark [name]="store.name" [src]="store.logoUrl"></app-couponleo-brandmark>
                     </span>
                     <div class="couponleo-country-store-card__copy">
-                      <strong>{{ store.name }}</strong>
+                      <strong>
+                        <a
+                          class="couponleo-store-name-link"
+                          [routerLink]="localizeRoute(store.route)"
+                          [queryParams]="countryRouteQuery()"
+                          data-telemetry-event="country_deals_store_name_open"
+                          [attr.data-telemetry-label]="store.name"
+                        >{{ store.name }}</a>
+                      </strong>
                       <span>{{ store.location }} | {{ store.category }}</span>
                     </div>
                   </div>
                   <span class="couponleo-country-store-card__pill">{{ store.deals }}</span>
                 </div>
                 <p>{{ store.description }}</p>
-                <a class="couponleo-button couponleo-button--ghost" [routerLink]="store.route" [queryParams]="countryRouteQuery()">
+                <a
+                  class="couponleo-button couponleo-button--ghost"
+                  [routerLink]="localizeRoute(store.route)"
+                  [queryParams]="countryRouteQuery()"
+                  data-telemetry-event="country_deals_store_open"
+                  [attr.data-telemetry-label]="store.name"
+                >
                   {{ i18n.t('countryDeals.viewStoreDeals') }}
                 </a>
               </article>
@@ -667,7 +728,7 @@ export default class CountryDealsPage {
         id: `market-${location.code ?? location.name}`,
         value: location.name,
         name: location.name,
-        spotlight: location.spotlight || this.i18n.t('countryDeals.marketCatalogSpotlight', { market: location.name }),
+        spotlight: resolveCouponleoLocationSpotlight(location) || this.i18n.t('countryDeals.marketCatalogSpotlight', { market: location.name }),
         deals: formatCount(location.couponCount ?? 0, 'live deal', 'live deals'),
         stores: formatCount(location.storeCount ?? 0, 'store', 'stores'),
         active: this.selectedCountry() === location.name,
@@ -699,10 +760,10 @@ export default class CountryDealsPage {
         return {
           id: `country-category-${category.slug}`,
           name: category.name,
-          headline: category.headline,
+          headline: buildCouponleoCategoryCardDescription(category),
           imageSrc: presentation.imageSrc,
           imageAlt: presentation.imageAlt,
-          route: buildCategoryRoute(category.slug),
+          route: this.localizeRoute(buildCategoryRoute(category.slug)),
           deals: formatCount(category.couponCount, 'live deal', 'live deals'),
           stores: formatCount(category.storeCount, 'store', 'stores'),
         };
@@ -721,9 +782,9 @@ export default class CountryDealsPage {
         name: store.name,
         location: store.location,
         category: store.category,
-        description: store.headline,
+        description: buildCouponleoStoreCardDescriptionForMarket(store, this.selectedCountry()),
         deals: formatCount(store.activeCoupons, 'live deal', 'live deals'),
-        route: buildStoreRoute(store.slug),
+        route: this.localizeRoute(buildStoreRoute(store.slug)),
         logoUrl: couponleoStoreLogoUrl(store),
       }))
   ));
@@ -766,5 +827,9 @@ export default class CountryDealsPage {
   protected setStorePage(pageNumber: number): void {
     const nextPage = Math.min(Math.max(pageNumber, 1), this.storePageCount());
     this.storePage.set(nextPage);
+  }
+
+  protected localizeRoute(path: string): string {
+    return localizeCouponleoRoute(path, this.i18n.locale());
   }
 }

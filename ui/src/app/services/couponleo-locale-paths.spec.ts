@@ -21,10 +21,13 @@ describe('couponleo locale paths', () => {
     expect(localizeCouponleoPathname('/ja/categories/womens-clothing', 'en-US')).toBe('/categories/womens-clothing');
   });
 
-  it('only marks SEO-facing public routes as localized path candidates', () => {
+  it('marks the supported CouponLeo routes as localized path candidates', () => {
     expect(isCouponleoLocalizedPublicPath('/categories')).toBe(true);
     expect(isCouponleoLocalizedPublicPath('/stores/lenovo-com')).toBe(true);
-    expect(isCouponleoLocalizedPublicPath('/wishlist')).toBe(false);
-    expect(isCouponleoLocalizedPublicPath('/sign-in')).toBe(false);
+    expect(isCouponleoLocalizedPublicPath('/wishlist')).toBe(true);
+    expect(isCouponleoLocalizedPublicPath('/sign-in')).toBe(true);
+    expect(isCouponleoLocalizedPublicPath('/dashboard')).toBe(true);
+    expect(localizeCouponleoPathname('/sign-in', 'it-IT')).toBe('/it/sign-in');
+    expect(localizeCouponleoPathname('/dashboard', 'fr-FR')).toBe('/fr/dashboard');
   });
 });

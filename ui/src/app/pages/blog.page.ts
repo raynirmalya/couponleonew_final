@@ -15,7 +15,13 @@ import { CouponleoPageContentService } from '../services/couponleo-page-content.
 import { createLoadingState, withHydratedRequestState } from '../services/couponleo-request-state.helpers';
 import { createStaticRouteMeta } from '../services/couponleo-route-meta';
 import { fetchCouponleoList } from '../services/couponleo-server-load.helpers';
-import { buildCategoryRoute, buildStoreRoute, formatExpiryLabel, getCategoryPresentation } from '../services/couponleo-ui.helpers';
+import {
+  buildCategoryRoute,
+  buildStoreRoute,
+  formatExpiryLabel,
+  getCategoryPresentation,
+  localizeCouponleoRoute,
+} from '../services/couponleo-ui.helpers';
 
 import tagIconSvg from '@eonui/icons/svg/commerce/eon-tag.svg?raw';
 import newspaperIconSvg from '@eonui/icons/svg/media/eon-newspaper.svg?raw';
@@ -25,7 +31,7 @@ import sparklesIconSvg from '@eonui/icons/svg/system/eon-sparkles.svg?raw';
 
 export const routeMeta = createStaticRouteMeta({
   title: 'CouponLeo Blog',
-  description: 'Read CouponLeo stories on verified deals, saving habits, store coverage, and category trends.',
+  description: 'Explore CouponLeo stories, shopping guides, store insights, and trend-watch updates for smarter online savings.',
 });
 
 interface TopicChip {
@@ -140,18 +146,31 @@ export async function load(pageServerLoad: PageServerLoad) {
           <h1>{{ labels().title }}</h1>
           <p>{{ labels().description }}</p>
 
-          <form class="couponleo-searchbar" (submit)="$event.preventDefault()">
+          <form
+            class="couponleo-searchbar"
+            (submit)="$event.preventDefault()"
+            data-telemetry-event="blog_search_submit"
+            data-telemetry-label="Blog search"
+          >
             <span class="couponleo-searchbar__icon" aria-hidden="true">
               <app-couponleo-eon-icon [svg]="searchIconSvg"></app-couponleo-eon-icon>
             </span>
             <input
               type="search"
+              data-telemetry-event="blog_search_input"
+              data-telemetry-label="Blog search"
               [placeholder]="labels().searchPlaceholder"
               [attr.aria-label]="labels().search"
               [value]="searchTerm()"
               (input)="updateSearch($any($event.target).value)"
             >
-            <button type="submit" class="couponleo-searchbar__button couponleo-searchbar__button--text" [attr.aria-label]="labels().search">
+            <button
+              type="submit"
+              class="couponleo-searchbar__button couponleo-searchbar__button--text"
+              [attr.aria-label]="labels().search"
+              data-telemetry-event="blog_search_button"
+              [attr.data-telemetry-label]="labels().search"
+            >
               {{ labels().search }}
             </button>
           </form>
@@ -172,7 +191,14 @@ export async function load(pageServerLoad: PageServerLoad) {
 
       <section class="couponleo-blog-shell__chip-row" [attr.aria-label]="labels().blogTopics">
         @for (chip of topicChips(); track chip.label) {
-          <button type="button" class="couponleo-blog-shell__chip" [class.is-active]="chip.active" (click)="selectTopic(chip.filterValue)">
+          <button
+            type="button"
+            class="couponleo-blog-shell__chip"
+            [class.is-active]="chip.active"
+            (click)="selectTopic(chip.filterValue)"
+            data-telemetry-event="blog_topic_select"
+            [attr.data-telemetry-label]="chip.label"
+          >
             {{ chip.label }}
           </button>
         }
@@ -225,9 +251,11 @@ export async function load(pageServerLoad: PageServerLoad) {
                     </div>
                     <a
                       class="couponleo-story-card__cta"
-                      [href]="story.href"
+                      [href]="storyHref(story)"
                       [attr.target]="story.external ? '_blank' : null"
                       [attr.rel]="story.external ? 'noreferrer' : null"
+                      data-telemetry-event="blog_featured_story_open"
+                      [attr.data-telemetry-label]="story.title"
                     >
                       {{ story.cta }}
                     </a>
@@ -256,9 +284,11 @@ export async function load(pageServerLoad: PageServerLoad) {
                   </div>
                   <img [src]="story.imageSrc" [alt]="story.title + ' illustration'" loading="lazy">
                   <a
-                    [href]="story.href"
+                    [href]="storyHref(story)"
                     [attr.target]="story.external ? '_blank' : null"
                     [attr.rel]="story.external ? 'noreferrer' : null"
+                    data-telemetry-event="blog_latest_story_open"
+                    [attr.data-telemetry-label]="story.title"
                   >
                     {{ story.cta }}
                   </a>
@@ -283,10 +313,21 @@ export async function load(pageServerLoad: PageServerLoad) {
                       {{ store.initials }}
                     </span>
                     <div>
-                      <strong>{{ store.name }}</strong>
+                      <strong>
+                        <a
+                          class="couponleo-store-name-link"
+                          [routerLink]="localizeRoute(store.route)"
+                          data-telemetry-event="blog_store_name_open"
+                          [attr.data-telemetry-label]="store.name"
+                        >{{ store.name }}</a>
+                      </strong>
                       <span>{{ store.rating }}</span>
                       <p>{{ store.coupons }}</p>
-                      <a [routerLink]="store.route">{{ labels().viewDeals }}</a>
+                      <a
+                        [routerLink]="localizeRoute(store.route)"
+                        data-telemetry-event="blog_store_open"
+                        [attr.data-telemetry-label]="store.name"
+                      >{{ labels().viewDeals }}</a>
                     </div>
                   </article>
                 }
@@ -300,7 +341,11 @@ export async function load(pageServerLoad: PageServerLoad) {
             <article class="couponleo-side-card">
               <div class="couponleo-side-card__header">
                 <h2>{{ labels().saleCalendar }}</h2>
-                <a routerLink="/blog">{{ labels().viewAll }}</a>
+                <a
+                  [routerLink]="localizeRoute('/blog')"
+                  data-telemetry-event="blog_sale_calendar_view_all"
+                  [attr.data-telemetry-label]="labels().viewAll"
+                >{{ labels().viewAll }}</a>
               </div>
 
               <div class="couponleo-side-card__day-row">
@@ -330,7 +375,12 @@ export async function load(pageServerLoad: PageServerLoad) {
                 }
               </div>
 
-              <a class="couponleo-side-card__footer-link" routerLink="/blog">{{ labels().viewFullCalendar }}</a>
+              <a
+                class="couponleo-side-card__footer-link"
+                [routerLink]="localizeRoute('/blog')"
+                data-telemetry-event="blog_sale_calendar_full_open"
+                [attr.data-telemetry-label]="labels().viewFullCalendar"
+              >{{ labels().viewFullCalendar }}</a>
             </article>
           }
 
@@ -345,7 +395,13 @@ export async function load(pageServerLoad: PageServerLoad) {
                   <span>{{ story.rank }}</span>
                   <div>
                     <strong>
-                      <a [href]="story.href" [attr.target]="story.external ? '_blank' : null" [attr.rel]="story.external ? 'noreferrer' : null">
+                      <a
+                        [href]="storyHref(story)"
+                        [attr.target]="story.external ? '_blank' : null"
+                        [attr.rel]="story.external ? 'noreferrer' : null"
+                        data-telemetry-event="blog_popular_story_open"
+                        [attr.data-telemetry-label]="story.title"
+                      >
                         {{ story.title }}
                       </a>
                     </strong>
@@ -1156,18 +1212,18 @@ export default class BlogPage {
   protected readonly labels = computed(() => ({
     eyebrow: this.i18n.phrase('Blog'),
     title: this.i18n.phrase('CouponLeo Blog'),
-    description: this.i18n.phrase('Live source stories, store coverage, and market snapshots pulled into the current CouponLeo catalog.'),
+    description: this.i18n.phrase('Shopping ideas, deal-watch notes, and brand insights to help you save with a little more context.'),
     search: this.i18n.phrase('Search'),
     searchPlaceholder: this.i18n.phrase('Search source stories, guides & more'),
     blogTopics: this.i18n.phrase('Blog topics'),
     featuredStories: this.i18n.phrase('Featured Stories'),
-    featuredStoriesCaption: this.i18n.phrase('Start with the strongest stories from the live feed, then explore the rest of the editorial mix.'),
+    featuredStoriesCaption: this.i18n.phrase('Start with the most useful stories in the feed, then move into the guides, trend notes, and store-related reads below.'),
     viewAllStories: this.i18n.phrase('View all stories'),
     latestStories: this.i18n.phrase('Latest Stories'),
-    latestStoriesCaption: this.i18n.phrase('Fresh reporting and saving ideas from the sources flowing through the local article API.'),
+    latestStoriesCaption: this.i18n.phrase('Fresh reads that can help you spot smarter timing, better merchants, and stronger savings.'),
     storeInsights: this.i18n.phrase('Store Insights'),
     fromDealsCatalog: this.i18n.phrase('From the deals catalog'),
-    fromDealsCatalogCaption: this.i18n.phrase('A lighter bridge back to the store directory, without taking over the page.'),
+    fromDealsCatalogCaption: this.i18n.phrase('A quick bridge back into the live CouponLeo catalog when a story leads you to a brand or category worth exploring.'),
     viewDeals: this.i18n.phrase('View Deals'),
     savingsGuides: this.i18n.phrase('Savings Guides'),
     saleCalendar: this.i18n.phrase('Sale Calendar'),
@@ -1366,6 +1422,14 @@ export default class BlogPage {
 
   protected selectTopic(value: string): void {
     this.selectedTopic.set(value === this.selectedTopic() ? '' : value);
+  }
+
+  protected localizeRoute(path: string): string {
+    return localizeCouponleoRoute(path, this.i18n.locale());
+  }
+
+  protected storyHref(story: { href: string; external: boolean }): string {
+    return story.external ? story.href : this.localizeRoute(story.href);
   }
 
   private formatCount(value: number, singular: string, plural: string): string {

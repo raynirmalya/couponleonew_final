@@ -143,6 +143,171 @@ def _title_case_words(value: str) -> str:
     return " ".join(word.capitalize() for word in words if word)
 
 
+def _unique_texts(values: List[str]) -> List[str]:
+    seen: set[str] = set()
+    results: List[str] = []
+
+    for value in values:
+        cleaned = re.sub(r"\s+", " ", _clean_text(value)).strip()
+        if not cleaned:
+            continue
+
+        key = cleaned.lower()
+        if key in seen:
+            continue
+
+        seen.add(key)
+        results.append(cleaned)
+
+    return results
+
+
+def _join_readable_list(values: List[str]) -> str:
+    if not values:
+        return ""
+    if len(values) == 1:
+        return values[0]
+    if len(values) == 2:
+        return f"{values[0]} and {values[1]}"
+    return f"{', '.join(values[:-1])}, and {values[-1]}"
+
+
+def _first_nonempty_text(*values: Any) -> str:
+    for value in values:
+        cleaned = _clean_text(value)
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def _count_phrase(value: Any, singular: str, plural: str) -> str:
+    normalized_value = max(0, int(_pick_numeric(value)))
+    label = singular if normalized_value == 1 else plural
+    return f"{normalized_value} {label}"
+
+
+def _category_copy(category_name: Any) -> str:
+    normalized_category = _clean_text(category_name)
+    if not normalized_category or normalized_category.lower() == "other":
+        return "shopping"
+    return normalized_category.lower()
+
+
+def _market_copy(location_name: Any) -> str:
+    normalized_location = _clean_text(location_name) or "Global"
+    if normalized_location.lower() == "global":
+        return "across global markets"
+    return f"in {normalized_location}"
+
+
+def _store_host_label(store_name: Any, store_url: Any) -> str:
+    return _normalize_host(store_url) or _normalize_host(store_name) or _clean_text(store_name) or "couponleo.com"
+
+
+def _merchant_description(record: Dict[str, Any]) -> str:
+    return _first_nonempty_text(
+        record.get("websiteDescription"),
+        record.get("website_description"),
+        record.get("merchantDescription"),
+        record.get("merchant_description"),
+        record.get("siteDescription"),
+        record.get("site_description"),
+    )
+
+
+def _merchant_meta_description(record: Dict[str, Any]) -> str:
+    return _first_nonempty_text(
+        record.get("websiteMetaDescription"),
+        record.get("website_meta_description"),
+        record.get("meta_description"),
+        record.get("metaDescription"),
+        record.get("ogDescription"),
+        record.get("og_description"),
+    )
+
+
+def _looks_like_generated_store_copy(value: Any, store_name: str = "") -> bool:
+    normalized = _lower_text(value)
+    if not normalized:
+        return False
+
+    markers = (
+        "tracked by couponleo",
+        "this route helps shoppers compare",
+        "live offers available across",
+        "currently has ",
+        "listed on couponleo",
+        "giving shoppers a quick way to compare active codes",
+        "check the latest coupon codes, price drops, and checkout offers in one place",
+        "couponleo recognizes ",
+    )
+
+    if any(marker in normalized for marker in markers):
+        return True
+
+    normalized_store_name = _clean_text(store_name).lower()
+    return bool(normalized_store_name) and normalized.startswith(normalized_store_name) and "couponleo" in normalized
+
+
+def _looks_like_generated_category_copy(value: Any, category_name: str = "") -> bool:
+    normalized = _lower_text(value)
+    if not normalized:
+        return False
+
+    markers = (
+        "shoppers can browse ",
+        "in one place, which makes it easier to compare",
+        "start here if you want to compare ",
+        "couponleo is still tracking",
+    )
+
+    if any(marker in normalized for marker in markers):
+        return True
+
+    normalized_category_name = _clean_text(category_name).lower()
+    return bool(normalized_category_name) and normalized.startswith(normalized_category_name) and "couponleo" in normalized
+
+
+def _trim_offer_example(value: Any, limit: int = 92) -> str:
+    cleaned = re.sub(r"\s+", " ", _clean_text(value)).strip(" ,.;:-")
+
+    if len(cleaned) < 8:
+        return ""
+
+    if len(cleaned) <= limit:
+        return cleaned
+
+    shortened = cleaned[: limit - 3].rsplit(" ", 1)[0].strip(" ,.;:-")
+    return f"{shortened or cleaned[: limit - 3]}..."
+
+
+def _collect_offer_examples(raw_coupons: List[Dict[str, Any]], limit: int = 3) -> List[str]:
+    examples: List[str] = []
+    seen: set[str] = set()
+
+    for raw_coupon in raw_coupons:
+        for candidate in (
+            raw_coupon.get("description"),
+            raw_coupon.get("label"),
+            raw_coupon.get("title"),
+        ):
+            example = _trim_offer_example(candidate)
+            if not example:
+                continue
+
+            key = example.lower()
+            if key in seen:
+                continue
+
+            seen.add(key)
+            examples.append(example)
+
+            if len(examples) >= limit:
+                return examples
+
+    return examples
+
+
 def _location_name_key(value: Any) -> str:
     return _slugify(_clean_text(value)).upper()
 
@@ -193,6 +358,165 @@ class CouponLeoRepository:
             "on",
         }
         self._direct_query_cache: Dict[tuple, tuple[float, Any]] = {}
+
+    def _enrich_store_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
+        enriched = deepcopy(record)
+        store_name = _clean_text(enriched.get("name")) or "Unknown store"
+        category_name = _title_case_words(
+            _clean_text(enriched.get("category")) or _clean_text(enriched.get("category_hint"))
+        ) or "Store"
+        location_name = _clean_text(enriched.get("location") or enriched.get("primary_location")) or "Global"
+        coupon_count = max(0, int(_pick_numeric(enriched.get("activeCoupons") or enriched.get("couponCount"))))
+        savings = _clean_text(enriched.get("savings"))
+        store_url = _sanitize_http_url(enriched.get("url")) or "https://couponleo.com"
+        website_host = _store_host_label(store_name, store_url)
+        category_copy = _category_copy(category_name)
+        market_copy = _market_copy(location_name)
+        featured = bool(enriched.get("featured"))
+        merchant_description = _merchant_description(enriched)
+        merchant_meta_description = _merchant_meta_description(enriched)
+        if _looks_like_generated_store_copy(merchant_description, store_name):
+            merchant_description = ""
+        if _looks_like_generated_store_copy(merchant_meta_description, store_name):
+            merchant_meta_description = ""
+        offer_examples = _unique_texts(
+            [value for value in (enriched.get("offerExamples") or []) if isinstance(value, str)]
+        ) if isinstance(enriched.get("offerExamples"), list) else []
+        offer_example_text = _join_readable_list(offer_examples[:2])
+
+        if coupon_count > 0:
+            if category_name != "Other":
+                description = (
+                    f"{store_name} is a strong stop for {category_copy}, and {_count_phrase(coupon_count, 'live offer', 'live offers')} "
+                    f"are active {market_copy} right now for shoppers who want to compare discounts before visiting {website_host}."
+                )
+            else:
+                description = (
+                    f"{store_name} has {_count_phrase(coupon_count, 'live offer', 'live offers')} active {market_copy} right now, "
+                    "making it easier to spot coupon codes, price cuts, and limited-time checkout savings before you buy."
+                )
+            follow_up = (
+                f"Browse the latest coupon codes, checkout promos, and price-drop offers in one place, then head to {website_host} once the best saving stands out."
+            )
+            if offer_example_text:
+                follow_up += f" Recent examples mention {offer_example_text}."
+            elif savings:
+                follow_up += f" Savings highlights include {savings}."
+            elif featured:
+                follow_up += " It also stands out in the featured merchant mix when you are comparing similar brands."
+        else:
+            description = (
+                f"{store_name} is still worth keeping on your radar if you like to compare brands before buying, even though no live offers are showing right now."
+            )
+            follow_up = (
+                f"The store link, category context, and market details stay ready so you can check back quickly when fresh savings return at {website_host}."
+            )
+
+        keyword_highlights = _unique_texts([
+            f"{store_name} coupon codes",
+            f"{store_name} promo codes",
+            f"{category_name} deals",
+            f"{location_name} offers",
+        ])
+
+        existing_description = _clean_text(enriched.get("description"))
+        existing_paragraphs = _unique_texts(
+            [value for value in (enriched.get("seoParagraphs") or []) if isinstance(value, str)]
+        ) if isinstance(enriched.get("seoParagraphs"), list) else []
+        existing_highlights = _unique_texts(
+            [value for value in (enriched.get("keywordHighlights") or []) if isinstance(value, str)]
+        ) if isinstance(enriched.get("keywordHighlights"), list) else []
+        existing_meta_description = _clean_text(enriched.get("metaDescription"))
+        preferred_description = (
+            merchant_description
+            or (existing_description if existing_description and not _looks_like_generated_store_copy(existing_description, store_name) else "")
+            or description
+        )
+        preferred_meta_description = (
+            merchant_meta_description
+            or (existing_meta_description if existing_meta_description and not _looks_like_generated_store_copy(existing_meta_description, store_name) else "")
+            or preferred_description
+        )
+        preferred_paragraphs = (
+            existing_paragraphs
+            if any(not _looks_like_generated_store_copy(value, store_name) for value in existing_paragraphs)
+            else _unique_texts([preferred_description, follow_up])
+        )
+
+        if not _clean_text(enriched.get("headline")):
+            enriched["headline"] = (
+                f"{_count_phrase(coupon_count, 'live offer', 'live offers')} from {store_name} "
+                f"{market_copy} on CouponLeo."
+            )
+
+        enriched["category"] = category_name
+        enriched["location"] = location_name
+        enriched["url"] = store_url
+        enriched["websiteHost"] = _clean_text(enriched.get("websiteHost")) or website_host
+        enriched["websiteDescription"] = merchant_description
+        enriched["description"] = preferred_description
+        enriched["metaDescription"] = preferred_meta_description
+        enriched["seoParagraphs"] = preferred_paragraphs
+        enriched["keywordHighlights"] = existing_highlights or keyword_highlights
+        enriched["offerExamples"] = offer_examples
+        return enriched
+
+    def _enrich_category_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
+        enriched = deepcopy(record)
+        category_name = _title_case_words(_clean_text(enriched.get("name"))) or "Category"
+        coupon_count = max(0, int(_pick_numeric(enriched.get("couponCount"))))
+        store_count = max(0, int(_pick_numeric(enriched.get("storeCount"))))
+        category_copy = _category_copy(category_name)
+
+        if coupon_count > 0 or store_count > 0:
+            description = (
+                f"{category_name} deals are live across {_count_phrase(store_count, 'store', 'stores')} right now, with "
+                f"{_count_phrase(coupon_count, 'offer', 'offers')} ready for shoppers who want better prices, coupon codes, and strong sale picks without opening dozens of tabs."
+            )
+            follow_up = (
+                f"Use this collection to compare {category_copy} offers across multiple brands, narrow down the stores that still look active, and move faster when a good price appears."
+            )
+        else:
+            description = (
+                f"{category_name} is still part of the CouponLeo directory, even though there are no live deals showing right now."
+            )
+            follow_up = (
+                f"The category hub stays ready so shoppers can come back as soon as fresh {category_copy} savings start appearing again."
+            )
+
+        keyword_highlights = _unique_texts([
+            f"{category_name} coupon codes",
+            f"{category_name} deals",
+            f"{category_name} promo offers",
+            f"{_count_phrase(store_count, 'store', 'stores')} in {category_name}",
+        ])
+
+        existing_description = _clean_text(enriched.get("description"))
+        existing_paragraphs = _unique_texts(
+            [value for value in (enriched.get("seoParagraphs") or []) if isinstance(value, str)]
+        ) if isinstance(enriched.get("seoParagraphs"), list) else []
+        existing_highlights = _unique_texts(
+            [value for value in (enriched.get("keywordHighlights") or []) if isinstance(value, str)]
+        ) if isinstance(enriched.get("keywordHighlights"), list) else []
+        existing_meta_description = _clean_text(enriched.get("metaDescription"))
+        preferred_description = (
+            existing_description if existing_description and not _looks_like_generated_category_copy(existing_description, category_name) else description
+        )
+        preferred_meta_description = (
+            existing_meta_description if existing_meta_description and not _looks_like_generated_category_copy(existing_meta_description, category_name) else preferred_description
+        )
+        preferred_paragraphs = (
+            existing_paragraphs
+            if any(not _looks_like_generated_category_copy(value, category_name) for value in existing_paragraphs)
+            else _unique_texts([preferred_description, follow_up])
+        )
+
+        enriched["name"] = category_name
+        enriched["description"] = preferred_description
+        enriched["metaDescription"] = preferred_meta_description
+        enriched["seoParagraphs"] = preferred_paragraphs
+        enriched["keywordHighlights"] = existing_highlights or keyword_highlights
+        return enriched
 
     def _dataset_file_candidates(self) -> List[tuple[Path, str]]:
         candidates: List[tuple[Path, str]] = []
@@ -313,7 +637,11 @@ class CouponLeoRepository:
             precomputed_featured = self._load_precomputed_summary("featured-stores.json")
             if precomputed_featured is not None:
                 start = (normalized_page - 1) * normalized_limit
-                return deepcopy(precomputed_featured[start:start + normalized_limit]), len(precomputed_featured)
+                items = [
+                    self._enrich_store_record(item)
+                    for item in precomputed_featured[start:start + normalized_limit]
+                ]
+                return items, len(precomputed_featured)
 
         precomputed_stores = self._load_precomputed_summary("stores-summary.json")
         if precomputed_stores is None:
@@ -329,7 +657,11 @@ class CouponLeoRepository:
         )
         total = len(filtered_items)
         start = (normalized_page - 1) * normalized_limit
-        return deepcopy(filtered_items[start:start + normalized_limit]), total
+        items = [
+            self._enrich_store_record(item)
+            for item in filtered_items[start:start + normalized_limit]
+        ]
+        return items, total
 
     def _fallback_precomputed_category_page(
         self,
@@ -351,7 +683,11 @@ class CouponLeoRepository:
         normalized_page = max(1, int(page or 1))
         normalized_limit = max(1, int(limit or 48))
         start = (normalized_page - 1) * normalized_limit
-        return deepcopy(filtered_items[start:start + normalized_limit]), total
+        items = [
+            self._enrich_category_record(item)
+            for item in filtered_items[start:start + normalized_limit]
+        ]
+        return items, total
 
     def _fallback_precomputed_category_item(self, identifier: str) -> Optional[Dict[str, Any]]:
         target = _clean_text(identifier).lower()
@@ -368,7 +704,7 @@ class CouponLeoRepository:
                 _clean_text(item.get("slug")).lower(),
                 _clean_text(item.get("name")).lower(),
             }:
-                return deepcopy(item)
+                return self._enrich_category_record(item)
 
         return None
 
@@ -508,7 +844,21 @@ class CouponLeoRepository:
         if not force and now - self._last_refresh_tick < refresh_interval:
             return self._data
 
-        has_warm_data = bool(self._data.get("coupons") or self._data.get("stores") or self._data.get("storeDirectory"))
+        has_warm_data = self._should_reuse_current_data(self._data, self._data_source)
+
+        if not force and not has_warm_data:
+            fallback_data, fallback_source = self._fallback_dataset()
+            if self._should_reuse_current_data(fallback_data, fallback_source):
+                with self._lock:
+                    if not self._should_reuse_current_data(self._data, self._data_source):
+                        self._data = fallback_data
+                        self._data_source = fallback_source
+                        self._last_refresh_tick = now
+                        self._refreshed_at = datetime.utcnow().isoformat()
+                        self._reset_runtime_caches()
+
+                self._refresh_data_async_if_needed()
+                return self._data
 
         if not force and has_warm_data:
             self._refresh_data_async_if_needed()
@@ -745,6 +1095,106 @@ class CouponLeoRepository:
                 str(coupon.get("storeName", "")).lower()
             }:
                 continue
+            results.append(coupon)
+
+        ranked = self._rank_items("coupons", results)
+        self._search_cache[cache_key] = ranked
+        return ranked
+
+    def _cached_live_coupon_results(
+        self,
+        *,
+        query: str = "",
+        category: str = "",
+        store: str = "",
+        location: str = "",
+        featured: Optional[bool] = None,
+        active: Optional[bool] = True,
+    ) -> List[Dict[str, Any]]:
+        self._load_data()
+
+        if active is False:
+            return []
+
+        query_term = _clean_text(query).lower()
+        category_term = _clean_text(category).lower()
+        store_term = _clean_text(store).lower()
+        location_term = _clean_text(location).lower()
+        normalized_category_slug = _slugify(category_term.replace("-", " ")) if category_term else ""
+        normalized_store_slug = _slugify(store_term.replace(".", " ").replace("-", " ")) if store_term else ""
+        normalized_store_host = _normalize_host(store_term) if store_term else ""
+
+        cache_key = (
+            "live-coupons-cache",
+            query_term,
+            category_term,
+            store_term,
+            location_term,
+            featured,
+            active,
+        )
+        cached = self._search_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        items = self._data.get("coupons", [])
+        results = []
+
+        for coupon in items:
+            if featured is True and not bool(coupon.get("featured")):
+                continue
+            if featured is False and bool(coupon.get("featured")):
+                continue
+
+            if query_term:
+                haystack = " ".join(
+                    [
+                        str(coupon.get("title", "")),
+                        str(coupon.get("description", "")),
+                        str(coupon.get("storeName", "")),
+                        str(coupon.get("discountText", "")),
+                        str(coupon.get("code", "")),
+                    ]
+                ).lower()
+                if query_term not in haystack:
+                    continue
+
+            if category_term:
+                category_candidates = {
+                    str(coupon.get("categorySlug", "")).lower(),
+                    str(coupon.get("categoryName", "")).lower(),
+                }
+                category_candidates.update(str(value).strip().lower() for value in coupon.get("categoryAliases", []) if str(value).strip())
+                category_candidates.update(str(value).strip().lower() for value in coupon.get("categoryAliasSlugs", []) if str(value).strip())
+                if category_term not in category_candidates and normalized_category_slug not in category_candidates:
+                    continue
+
+            if store_term:
+                store_candidates = {
+                    str(coupon.get("storeSlug", "")).lower(),
+                    str(coupon.get("storeName", "")).lower(),
+                    _slugify(str(coupon.get("storeName", "")).replace(".", " ").replace("-", " ")),
+                    _normalize_host(str(coupon.get("merchant_home_page", ""))),
+                    _normalize_host(str(coupon.get("url", ""))),
+                }
+                if (
+                    store_term not in store_candidates
+                    and normalized_store_slug not in store_candidates
+                    and normalized_store_host not in store_candidates
+                ):
+                    continue
+
+            if location_term:
+                location_haystack = " ".join(
+                    [
+                        str(coupon.get("location", "")),
+                        str(coupon.get("primary_location", "")),
+                        str(coupon.get("locations", "")),
+                    ]
+                ).lower()
+                if location_term not in location_haystack:
+                    continue
+
             results.append(coupon)
 
         ranked = self._rank_items("coupons", results)
@@ -1037,6 +1487,25 @@ class CouponLeoRepository:
         if cached is not None:
             return cached
 
+        if active is None or active:
+            try:
+                cached_items = self._cached_live_coupon_results(
+                    query=query,
+                    category=category,
+                    store=store,
+                    location=location,
+                    featured=featured,
+                    active=active,
+                )
+                start = (normalized_page - 1) * normalized_limit
+                total = len(cached_items)
+                return self._write_direct_cache(
+                    cache_key,
+                    (deepcopy(cached_items[start:start + normalized_limit]), total),
+                )
+            except Exception:
+                pass
+
         clauses, params = self._live_coupon_where_clauses(
             query=query,
             category=category,
@@ -1233,7 +1702,7 @@ class CouponLeoRepository:
                 "hasLiveOffers": coupon_count > 0,
             }
         )
-        return record
+        return self._enrich_store_record(record)
 
     def list_stores_live(
         self,
@@ -1276,7 +1745,10 @@ class CouponLeoRepository:
             if precomputed_page is not None:
                 return precomputed_page
 
-            items = self.search_stores(query=query, category=category, location=location)
+            items = [
+                self._enrich_store_record(item)
+                for item in self.search_stores(query=query, category=category, location=location)
+            ]
             if featured is True:
                 items = [item for item in items if bool(item.get("featured"))][: max(1, int(limit or 48))]
             total = len(items)
@@ -1566,12 +2038,19 @@ class CouponLeoRepository:
 
     def get_store_live(self, identifier: str) -> Optional[Dict[str, Any]]:
         if not self._direct_catalog_mode():
-            return self.get_item("stores", identifier)
+            item = self.get_item("stores", identifier)
+            return self._enrich_store_record(item) if item else None
 
         cache_key = ("live-store", _clean_text(identifier).lower())
         cached = self._read_direct_cache(cache_key)
         if cached is not None:
             return cached
+
+        self._load_data()
+        if self._data_source != "seed":
+            preloaded_store = self.get_item("stores", identifier)
+            if preloaded_store is not None:
+                return self._write_direct_cache(cache_key, self._enrich_store_record(preloaded_store))
 
         store_row = self._store_row_by_identifier(identifier)
         if not store_row:
@@ -1595,7 +2074,7 @@ class CouponLeoRepository:
         else:
             store_payload = self._build_store_directory_record(store_row, location_lookup)
 
-        return self._write_direct_cache(cache_key, store_payload)
+        return self._write_direct_cache(cache_key, self._enrich_store_record(store_payload))
 
     def _aggregate_category_rows(self, query: str = "", location: str = "") -> List[Dict[str, Any]]:
         cache_key = ("live-category-rows", _clean_text(query).lower(), _clean_text(location).lower())
@@ -1687,6 +2166,16 @@ class CouponLeoRepository:
             if precomputed_page is not None:
                 return precomputed_page
 
+            items = [
+                self._enrich_category_record(item)
+                for item in self.search_categories(query=query)
+            ]
+            total = len(items)
+            normalized_page = max(1, int(page or 1))
+            normalized_limit = max(1, int(limit or 48))
+            start = (normalized_page - 1) * normalized_limit
+            return items[start:start + normalized_limit], total
+
         try:
             items = self._aggregate_category_rows(query=query, location=location)
         except Exception:
@@ -1721,7 +2210,7 @@ class CouponLeoRepository:
                     _clean_text(item.get("slug")).lower(),
                     _clean_text(item.get("name")).lower(),
                 }:
-                    return deepcopy(item)
+                    return self._enrich_category_record(item)
         except Exception:
             pass
 
@@ -1835,6 +2324,11 @@ class CouponLeoRepository:
     def store_analytics_live(self) -> Dict[str, int]:
         if not self._direct_catalog_mode():
             return self.store_analytics()
+
+        try:
+            return self.store_analytics()
+        except Exception:
+            pass
 
         cache_key = ("live-store-analytics",)
         cached = self._read_direct_cache(cache_key)
@@ -2667,6 +3161,7 @@ class CouponLeoRepository:
         coupon_count = len(grouped_coupons)
         score = self._store_quality_score(store_row, grouped_coupons, bool(logo_url))
         savings = _clean_text(primary_coupon.get("label")) or _clean_text(primary_coupon.get("title")) or "Live savings"
+        offer_examples = _collect_offer_examples(grouped_coupons)
 
         url_candidates = (
             store_row.get("url") if store_row else "",
@@ -2694,7 +3189,7 @@ class CouponLeoRepository:
             f"{coupon_count} live {category_copy} offers for {location_name} shoppers, refreshed from CouponLeo's real coupon feed."
         )
 
-        return {
+        return self._enrich_store_record({
             "id": str(store_row.get("id")) if store_row else slug,
             "name": store_name,
             "slug": slug,
@@ -2713,10 +3208,23 @@ class CouponLeoRepository:
             "logo_square_url": square_logo,
             "logoUrl": logo_url,
             "image_url": logo_url,
+            "websiteDescription": _first_nonempty_text(
+                store_row.get("websiteDescription") if store_row else "",
+                store_row.get("website_description") if store_row else "",
+                store_row.get("merchantDescription") if store_row else "",
+                store_row.get("merchant_description") if store_row else "",
+            ),
+            "websiteMetaDescription": _first_nonempty_text(
+                store_row.get("websiteMetaDescription") if store_row else "",
+                store_row.get("website_meta_description") if store_row else "",
+                store_row.get("metaDescription") if store_row else "",
+                store_row.get("meta_description") if store_row else "",
+            ),
+            "offerExamples": offer_examples,
             "domains": sorted(domains),
             "matchDomains": sorted(domains),
             "hasLiveOffers": True,
-        }
+        })
 
     def _build_store_directory_record(
         self,
@@ -2753,7 +3261,7 @@ class CouponLeoRepository:
         domains = {domain for domain in domains if domain}
         rank_score = int(max(45, min(92, _pick_numeric(store_row.get("initial_rank_score"), 45))))
 
-        return {
+        return self._enrich_store_record({
             "id": str(store_row.get("id")) or slug,
             "name": store_name,
             "slug": slug,
@@ -2772,10 +3280,22 @@ class CouponLeoRepository:
             "logo_square_url": square_logo,
             "logoUrl": logo_url,
             "image_url": logo_url,
+            "websiteDescription": _first_nonempty_text(
+                store_row.get("websiteDescription"),
+                store_row.get("website_description"),
+                store_row.get("merchantDescription"),
+                store_row.get("merchant_description"),
+            ),
+            "websiteMetaDescription": _first_nonempty_text(
+                store_row.get("websiteMetaDescription"),
+                store_row.get("website_meta_description"),
+                store_row.get("metaDescription"),
+                store_row.get("meta_description"),
+            ),
             "domains": sorted(domains),
             "matchDomains": sorted(domains),
             "hasLiveOffers": False,
-        }
+        })
 
     def _build_coupon_record(
         self,
@@ -2882,14 +3402,16 @@ class CouponLeoRepository:
             store_count = len(entry["storeNames"])
             headline = f"{entry['couponCount']} live offers across {store_count} stores."
             categories.append(
-                {
-                    "id": entry["id"],
-                    "name": entry["name"],
-                    "slug": entry["slug"],
-                    "headline": headline,
-                    "couponCount": entry["couponCount"],
-                    "storeCount": store_count,
-                }
+                self._enrich_category_record(
+                    {
+                        "id": entry["id"],
+                        "name": entry["name"],
+                        "slug": entry["slug"],
+                        "headline": headline,
+                        "couponCount": entry["couponCount"],
+                        "storeCount": store_count,
+                    }
+                )
             )
 
         return self._rank_items("categories", categories)

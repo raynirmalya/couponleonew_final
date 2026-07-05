@@ -6,6 +6,7 @@ import { CouponleoEonIconComponent } from './couponleo-eon-icon.component';
 import { CouponleoAuthService } from '../services/couponleo-auth.service';
 import { CouponleoI18nService } from '../services/couponleo-i18n.service';
 import { CouponleoNewsletterService } from '../services/couponleo-newsletter.service';
+import { localizeCouponleoRoute } from '../services/couponleo-ui.helpers';
 
 type CouponleoNewsletterSurface = 'light' | 'dark';
 type CouponleoNewsletterStatusTone = 'neutral' | 'success' | 'error';
@@ -16,7 +17,12 @@ type CouponleoNewsletterStatusTone = 'neutral' | 'success' | 'error';
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   template: `
-    <form [class]="formClass()" (ngSubmit)="handleSubmit()">
+    <form
+      [class]="formClass()"
+      (ngSubmit)="handleSubmit()"
+      data-telemetry-event="newsletter_submit"
+      [attr.data-telemetry-label]="currentButtonLabel()"
+    >
       <input
         type="email"
         name="newsletterEmail"
@@ -26,6 +32,8 @@ type CouponleoNewsletterStatusTone = 'neutral' | 'success' | 'error';
         [readonly]="signedInReadonly() && isAuthenticated()"
         [attr.aria-label]="emailAriaLabel()"
         autocomplete="email"
+        data-telemetry-event="newsletter_email_change"
+        [attr.data-telemetry-label]="emailAriaLabel()"
         (ngModelChange)="handleEmailChange($event)"
       >
       <button
@@ -33,6 +41,8 @@ type CouponleoNewsletterStatusTone = 'neutral' | 'success' | 'error';
         [class]="buttonClass()"
         [attr.aria-label]="resolvedButtonAriaLabel()"
         [disabled]="submitting()"
+        data-telemetry-event="newsletter_submit_click"
+        [attr.data-telemetry-label]="currentButtonLabel()"
       >
         @if (iconOnly() && hasButtonIcon()) {
           <span class="couponleo-newsletter-form__sr-only">{{ currentButtonLabel() }}</span>
@@ -256,6 +266,7 @@ export class CouponleoNewsletterFormComponent implements OnInit {
   protected readonly i18n = inject(CouponleoI18nService);
   private readonly newsletter = inject(CouponleoNewsletterService);
   private readonly router = inject(Router);
+  protected readonly localizeRoute = (path: string) => localizeCouponleoRoute(path, this.i18n.locale());
 
   readonly formClass = input('couponleo-newsletter__form');
   readonly inputClass = input('');
@@ -317,7 +328,7 @@ export class CouponleoNewsletterFormComponent implements OnInit {
     }
 
     this.newsletter.queuePendingIntent(this.email(), this.router.url);
-    void this.router.navigate(['/sign-in'], {
+    void this.router.navigate([this.localizeRoute('/sign-in')], {
       queryParams: this.newsletter.buildSignInQueryParams(this.email(), this.router.url),
     });
   }

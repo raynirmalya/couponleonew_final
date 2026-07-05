@@ -16,6 +16,7 @@ import {
   type CouponleoTelemetryEventPayload,
   type CouponleoTelemetryMetadata,
 } from './couponleo-api.service';
+import { extractCouponleoLocaleFromPathname } from './couponleo-locale-paths';
 
 interface CouponleoStoredSessionSnapshot {
   email?: string;
@@ -41,6 +42,16 @@ interface CouponleoDetectedLocation {
   cityName: string;
   source: string;
   resolvedAt: string;
+}
+
+interface CouponleoRouteTelemetryContext {
+  countryFilter: string;
+  entitySlug: string;
+  locale: string;
+  localized: boolean;
+  pageType: string;
+  routeGroup: string;
+  segmentCount: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -85,6 +96,7 @@ export class CouponleoTelemetryService {
     const searchParams = new URLSearchParams(location.search);
     const session = this.readSessionSnapshot();
     const locationContext = this.resolveLocationContext(event, searchParams);
+    const routeContext = this.resolveRouteContext(location.pathname, searchParams);
 
     const telemetryEvent: CouponleoTelemetryEventPayload = {
       eventId: this.createId(),
@@ -108,7 +120,10 @@ export class CouponleoTelemetryService {
       countryName: locationContext.countryName,
       regionName: locationContext.regionName,
       cityName: locationContext.cityName,
-      selectedLocale: normalizeText(event.selectedLocale || searchParams.get('lang') || this.readStoredLocale(), 32),
+      selectedLocale: normalizeText(
+        event.selectedLocale || routeContext.locale || searchParams.get('lang') || this.readStoredLocale(),
+        32,
+      ),
       browserLanguage: normalizeText(event.browserLanguage || window.navigator.language, 32),
       timezone: normalizeText(event.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone, 64),
       screenWidth: event.screenWidth ?? window.screen?.width ?? undefined,
@@ -117,7 +132,7 @@ export class CouponleoTelemetryService {
       viewportHeight: event.viewportHeight ?? window.innerHeight,
       userAgent: normalizeText(event.userAgent || window.navigator.userAgent, 1024),
       source: normalizeText(event.source || 'couponleo-ui', 32),
-      metadata: this.normalizeMetadata(event.metadata),
+      metadata: this.normalizeMetadata(event.metadata, routeContext),
     };
 
     this.queue.push(telemetryEvent);
@@ -190,7 +205,7 @@ export class CouponleoTelemetryService {
 
   private handleChange(event: Event): void {
     const element = this.findFormElement(event.target);
-    if (!element) {
+    if (!element || this.shouldIgnoreField(element)) {
       return;
     }
 
@@ -627,11 +642,43 @@ export class CouponleoTelemetryService {
   }
 
   private resolveElementLabel(element: HTMLElement): string {
+    if (element instanceof HTMLInputElement) {
+      const inputType = normalizeText(element.type || 'text', 32).toLowerCase();
+      const fallbackLabel = normalizeText(
+        element.getAttribute('data-telemetry-label')
+          || element.getAttribute('aria-label')
+          || element.getAttribute('placeholder')
+          || element.getAttribute('title')
+          || element.getAttribute('name')
+          || element.id
+          || inputType
+          || 'input',
+        255,
+      );
+
+      if (['button', 'submit', 'reset'].includes(inputType)) {
+        return normalizeText(element.value || fallbackLabel, 255);
+      }
+
+      return fallbackLabel;
+    }
+
+    if (element instanceof HTMLSelectElement || element instanceof HTMLTextAreaElement) {
+      return normalizeText(
+        element.getAttribute('data-telemetry-label')
+          || element.getAttribute('aria-label')
+          || element.getAttribute('title')
+          || element.getAttribute('name')
+          || element.id
+          || element.tagName.toLowerCase(),
+        255,
+      );
+    }
+
     return normalizeText(
       element.getAttribute('data-telemetry-label')
         || element.getAttribute('aria-label')
         || element.getAttribute('title')
-        || ('value' in element ? String((element as HTMLInputElement).value || '') : '')
         || element.textContent
         || element.getAttribute('name')
         || element.tagName.toLowerCase(),
@@ -664,11 +711,142 @@ export class CouponleoTelemetryService {
     };
   }
 
-  private normalizeMetadata(metadata: CouponleoTelemetryMetadata | undefined): CouponleoTelemetryMetadata {
-    if (metadata === undefined) {
-      return null;
+  private shouldIgnoreField(element: HTMLElement): boolean {
+    if (!(element instanceof HTMLInputElement)) {
+      return false;
     }
 
-    return metadata;
+    const inputType = normalizeText(element.type || 'text', 32).toLowerCase();
+    if (['hidden', 'password', 'file'].includes(inputType)) {
+      return true;
+    }
+
+    const fieldName = normalizeText(
+      element.name || element.id || element.getAttribute('autocomplete') || '',
+      120,
+    ).toLowerCase();
+
+    return ['password', 'passcode', 'secret', 'token', 'otp'].some((marker) => fieldName.includes(marker));
+  }
+
+  private resolveRouteContext(pathname: string, searchParams: URLSearchParams): CouponleoRouteTelemetryContext {
+    const localizedPathLocale = extractCouponleoLocaleFromPathname(pathname);
+    const normalizedPath = this.stripLocalePrefix(pathname, localizedPathLocale);
+    const segments = normalizedPath.split('/').filter(Boolean);
+    const topLevelSegment = normalizeText(segments[0] || 'home', 120).toLowerCase();
+    const entitySlug = normalizeText(segments[1], 160);
+
+    let pageType = 'unknown';
+    let routeGroup = topLevelSegment || 'home';
+
+    if (segments.length === 0) {
+      pageType = 'home';
+      routeGroup = 'home';
+    } else if (topLevelSegment === 'stores') {
+      pageType = entitySlug ? 'store_detail' : 'stores_index';
+      routeGroup = 'stores';
+    } else if (topLevelSegment === 'categories') {
+      pageType = entitySlug ? 'category_detail' : 'categories_index';
+      routeGroup = 'categories';
+    } else if (topLevelSegment === 'country-deals') {
+      pageType = 'country_deals';
+      routeGroup = 'country-deals';
+    } else if (topLevelSegment === 'top-deals') {
+      pageType = 'top_deals';
+      routeGroup = 'top-deals';
+    } else if (topLevelSegment === 'blog') {
+      pageType = 'blog';
+      routeGroup = 'blog';
+    } else if (topLevelSegment === 'wishlist') {
+      pageType = 'wishlist';
+      routeGroup = 'wishlist';
+    } else if (topLevelSegment === 'dashboard') {
+      pageType = 'dashboard';
+      routeGroup = 'dashboard';
+    } else if (topLevelSegment === 'sign-in') {
+      pageType = 'sign_in';
+      routeGroup = 'auth';
+    } else if (topLevelSegment === 'sign-up') {
+      pageType = 'sign_up';
+      routeGroup = 'auth';
+    } else if (topLevelSegment === 'about') {
+      pageType = 'about';
+      routeGroup = 'about';
+    } else if (topLevelSegment === 'contact') {
+      pageType = 'contact';
+      routeGroup = 'contact';
+    } else if (topLevelSegment === 'help-center') {
+      pageType = 'help_center';
+      routeGroup = 'help-center';
+    } else if (topLevelSegment === 'terms-of-use') {
+      pageType = 'terms_of_use';
+      routeGroup = 'terms-of-use';
+    } else if (topLevelSegment === 'privacy-policy') {
+      pageType = 'privacy_policy';
+      routeGroup = 'privacy-policy';
+    } else {
+      pageType = topLevelSegment || 'unknown';
+    }
+
+    return {
+      countryFilter: normalizeText(searchParams.get('country') || 'all', 160) || 'all',
+      entitySlug,
+      locale: normalizeText(localizedPathLocale || DEFAULT_LOCALE, 32) || DEFAULT_LOCALE,
+      localized: Boolean(localizedPathLocale),
+      pageType,
+      routeGroup,
+      segmentCount: segments.length,
+    };
+  }
+
+  private stripLocalePrefix(pathname: string, locale: string | null): string {
+    if (!locale) {
+      return pathname || '/';
+    }
+
+    const prefix = `/${locale}`;
+    if (pathname === prefix) {
+      return '/';
+    }
+
+    return pathname.startsWith(`${prefix}/`) ? pathname.slice(prefix.length) || '/' : pathname || '/';
+  }
+
+  private normalizeMetadata(
+    metadata: CouponleoTelemetryMetadata | undefined,
+    routeContext: CouponleoRouteTelemetryContext,
+  ): CouponleoTelemetryMetadata {
+    const baseMetadata = {
+      countryFilter: routeContext.countryFilter,
+      entitySlug: routeContext.entitySlug || undefined,
+      localeInPath: routeContext.locale,
+      localizedPath: routeContext.localized,
+      pageType: routeContext.pageType,
+      routeGroup: routeContext.routeGroup,
+      segmentCount: routeContext.segmentCount,
+    };
+
+    if (metadata === undefined || metadata === null || metadata === '') {
+      return baseMetadata;
+    }
+
+    if (Array.isArray(metadata)) {
+      return {
+        ...baseMetadata,
+        values: metadata,
+      };
+    }
+
+    if (typeof metadata === 'object') {
+      return {
+        ...(metadata as Record<string, unknown>),
+        ...baseMetadata,
+      };
+    }
+
+    return {
+      ...baseMetadata,
+      value: metadata,
+    };
   }
 }

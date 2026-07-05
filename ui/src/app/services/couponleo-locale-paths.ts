@@ -26,17 +26,25 @@ const SEGMENT_TO_LOCALE = new Map<string, CouponleoSupportedLocale>(
 const LOCALIZED_PUBLIC_ROUTE_PATTERNS = [
   /^\/$/,
   /^\/about$/,
+  /^\/alerts$/,
   /^\/blog$/,
   /^\/categories$/,
   /^\/categories\/[^/]+$/,
   /^\/contact$/,
   /^\/country-deals$/,
+  /^\/dashboard$/,
+  /^\/forgot-password$/,
   /^\/help-center$/,
+  /^\/my-coupons$/,
   /^\/privacy-policy$/,
+  /^\/settings$/,
+  /^\/sign-in$/,
+  /^\/sign-up$/,
   /^\/stores$/,
   /^\/stores\/[^/]+$/,
   /^\/terms-of-use$/,
   /^\/top-deals$/,
+  /^\/wishlist$/,
 ];
 
 export function couponleoLocalePathSegment(locale: string | null | undefined): string {

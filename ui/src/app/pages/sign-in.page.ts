@@ -8,6 +8,7 @@ import { CouponleoI18nService } from '../services/couponleo-i18n.service';
 import { CouponleoNewsletterService } from '../services/couponleo-newsletter.service';
 import { CouponleoPageContentService } from '../services/couponleo-page-content.service';
 import { createStaticRouteMeta } from '../services/couponleo-route-meta';
+import { localizeCouponleoRoute } from '../services/couponleo-ui.helpers';
 
 import tagIconSvg from '@eonui/icons/svg/commerce/eon-tag.svg?raw';
 import giftIconSvg from '@eonui/icons/svg/commerce/eon-gift.svg?raw';
@@ -84,7 +85,7 @@ export const routeMeta = createStaticRouteMeta({
             <img
               class="couponleo-signin__hero-image"
               src="/images/couponleo-hero-product-cutout-v2.png"
-              alt="Shopping bag, discount tag, gift box, and cart"
+              [attr.alt]="i18n.phrase('Shopping bag, discount tag, gift box, and cart')"
             >
             <span class="couponleo-signin__cart-badge" aria-hidden="true">
               <app-couponleo-eon-icon [svg]="cartIconSvg"></app-couponleo-eon-icon>
@@ -128,7 +129,12 @@ export const routeMeta = createStaticRouteMeta({
               </p>
             }
 
-            <form class="couponleo-signin__form" (ngSubmit)="handleSubmit()">
+            <form
+              class="couponleo-signin__form"
+              (ngSubmit)="handleSubmit()"
+              data-telemetry-event="sign_in_submit"
+              data-telemetry-label="Sign in"
+            >
               <label class="couponleo-signin__field">
                 <span>{{ i18n.t('signIn.emailLabel') }}</span>
                 <span class="couponleo-signin__input-shell">
@@ -141,6 +147,8 @@ export const routeMeta = createStaticRouteMeta({
                     [(ngModel)]="form.email"
                     [placeholder]="i18n.t('signIn.emailPlaceholder')"
                     autocomplete="email"
+                    data-telemetry-event="sign_in_email_change"
+                    [attr.data-telemetry-label]="i18n.t('signIn.emailLabel')"
                     required
                   >
                 </span>
@@ -149,7 +157,12 @@ export const routeMeta = createStaticRouteMeta({
               <label class="couponleo-signin__field">
                 <span class="couponleo-signin__field-row">
                   <span>{{ i18n.t('signIn.passwordLabel') }}</span>
-                  <a routerLink="/forgot-password" [queryParams]="forgotPasswordQueryParams()">{{ i18n.t('signIn.forgotPassword') }}</a>
+                  <a
+                    [routerLink]="localizeRoute('/forgot-password')"
+                    [queryParams]="forgotPasswordQueryParams()"
+                    data-telemetry-event="sign_in_forgot_password_open"
+                    [attr.data-telemetry-label]="i18n.t('signIn.forgotPassword')"
+                  >{{ i18n.t('signIn.forgotPassword') }}</a>
                 </span>
                 <span class="couponleo-signin__input-shell">
                   <span class="couponleo-signin__input-icon" aria-hidden="true">
@@ -168,6 +181,8 @@ export const routeMeta = createStaticRouteMeta({
                     class="couponleo-signin__visibility"
                     [attr.aria-label]="i18n.t('signIn.togglePassword')"
                     (click)="togglePassword()"
+                    data-telemetry-event="sign_in_toggle_password"
+                    [attr.data-telemetry-label]="i18n.t('signIn.togglePassword')"
                   >
                     <app-couponleo-eon-icon [svg]="showPassword() ? eyeOffIconSvg : eyeIconSvg"></app-couponleo-eon-icon>
                   </button>
@@ -178,6 +193,8 @@ export const routeMeta = createStaticRouteMeta({
                 type="submit"
                 class="couponleo-signin__submit"
                 [disabled]="submitBusy() || activationBusy() || !form.email.trim() || !form.password.trim()"
+                data-telemetry-event="sign_in_submit_click"
+                [attr.data-telemetry-label]="i18n.t('signIn.continue')"
               >
                 {{ submitBusy() ? 'Signing in...' : i18n.t('signIn.continue') }}
               </button>
@@ -198,7 +215,12 @@ export const routeMeta = createStaticRouteMeta({
 
             <p class="couponleo-signin__switch">
               {{ i18n.t('signIn.switchText') }}
-              <a routerLink="/sign-up" [queryParams]="signUpQueryParams()">{{ i18n.t('signIn.switchLink') }}</a>
+              <a
+                [routerLink]="localizeRoute('/sign-up')"
+                [queryParams]="signUpQueryParams()"
+                data-telemetry-event="sign_in_open_sign_up"
+                [attr.data-telemetry-label]="i18n.t('signIn.switchLink')"
+              >{{ i18n.t('signIn.switchLink') }}</a>
             </p>
           </div>
         </div>
@@ -753,6 +775,7 @@ export default class SignInPage {
   protected readonly eyeIconSvg = eyeIconSvg;
   protected readonly eyeOffIconSvg = eyeOffIconSvg;
   protected readonly cartIconSvg = cartIconSvg;
+  protected readonly localizeRoute = (path: string) => localizeCouponleoRoute(path, this.i18n.locale());
   protected readonly trustItems = computed(() => [
     {
       title: this.i18n.t('signIn.trustVerifiedTitle'),
@@ -843,7 +866,7 @@ export default class SignInPage {
     }
 
     if (!this.newsletterIntent()) {
-      return '/dashboard';
+      return this.localizeRoute('/dashboard');
     }
 
     return this.newsletter.sanitizeInternalUrl(this.route.snapshot.queryParamMap.get('returnUrl'));

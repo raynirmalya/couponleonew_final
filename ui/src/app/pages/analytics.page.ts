@@ -1,6 +1,8 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { CouponleoLocaleService } from '../services/couponleo-locale.service';
 import { createStaticRouteMeta } from '../services/couponleo-route-meta';
+import { localizeCouponleoRoute } from '../services/couponleo-ui.helpers';
 
 const localTelemetryDashboardUrl = 'http://127.0.0.1:4381';
 
@@ -26,7 +28,7 @@ export const routeMeta = createStaticRouteMeta({
         <a class="couponleo-button couponleo-button--solid" [href]="dashboardUrl" target="_blank" rel="noreferrer">
           Open local telemetry dashboard
         </a>
-        <a class="couponleo-button couponleo-button--ghost" routerLink="/dashboard">
+        <a class="couponleo-button couponleo-button--ghost" [routerLink]="localizeRoute('/dashboard')">
           Back to dashboard
         </a>
       </div>
@@ -78,5 +80,7 @@ export const routeMeta = createStaticRouteMeta({
   `],
 })
 export default class AnalyticsPage {
+  private readonly localeService = inject(CouponleoLocaleService);
   protected readonly dashboardUrl = localTelemetryDashboardUrl;
+  protected readonly localizeRoute = (path: string) => localizeCouponleoRoute(path, this.localeService.locale());
 }

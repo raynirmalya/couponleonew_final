@@ -71,6 +71,10 @@ export const appConfig: ApplicationConfig = {
         { path: 'saved', pathMatch: 'full', redirectTo: 'wishlist' },
         { path: 'signin', pathMatch: 'full', redirectTo: 'sign-in' },
         { path: 'signup', pathMatch: 'full', redirectTo: 'sign-up' },
+        { path: ':locale/login', pathMatch: 'full', redirectTo: ':locale/sign-in' },
+        { path: ':locale/saved', pathMatch: 'full', redirectTo: ':locale/wishlist' },
+        { path: ':locale/signin', pathMatch: 'full', redirectTo: ':locale/sign-in' },
+        { path: ':locale/signup', pathMatch: 'full', redirectTo: ':locale/sign-up' },
       ]),
     ),
     provideHttpClient(

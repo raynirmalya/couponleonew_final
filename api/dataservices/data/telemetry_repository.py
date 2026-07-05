@@ -229,6 +229,112 @@ class CouponleoTelemetryRepository:
         self._write_fallback_rows(next_rows)
         return stored_count
 
+    def _merge_rows(self, *row_groups: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        merged_rows: Dict[str, Dict[str, Any]] = {}
+
+        for rows in row_groups:
+            for row in rows:
+                normalized_row = {
+                    **row,
+                    "occurred_at": _parse_datetime(row.get("occurred_at")),
+                    "received_at": _parse_datetime(row.get("received_at")),
+                }
+                event_id = _clean_text(normalized_row.get("event_id"))
+                key = event_id or hashlib.md5(
+                    f"{_clean_text(normalized_row.get('event_type'))}:{_serialize_datetime(normalized_row.get('occurred_at'))}:{_clean_text(normalized_row.get('page_path'))}:{_clean_text(normalized_row.get('action_label'))}".encode("utf-8")
+                ).hexdigest()
+                existing_row = merged_rows.get(key)
+
+                if existing_row is None:
+                    merged_rows[key] = normalized_row
+                    continue
+
+                current_sort_key = (
+                    _parse_datetime(normalized_row.get("occurred_at")),
+                    _parse_datetime(normalized_row.get("received_at")),
+                )
+                existing_sort_key = (
+                    _parse_datetime(existing_row.get("occurred_at")),
+                    _parse_datetime(existing_row.get("received_at")),
+                )
+
+                if current_sort_key >= existing_sort_key:
+                    merged_rows[key] = normalized_row
+
+        return list(merged_rows.values())
+
+    def _load_recent_mysql_rows(self, days: int) -> List[Dict[str, Any]]:
+        if not self.ensure_table():
+            return []
+
+        safe_days = max(1, min(int(days or Config.TELEMETRY_DEFAULT_WINDOW_DAYS), 90))
+        window_start = datetime.utcnow() - timedelta(days=safe_days)
+
+        connection = self._connect_mysql()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        event_id,
+                        occurred_at,
+                        received_at,
+                        event_type,
+                        event_name,
+                        page_path,
+                        page_query,
+                        page_title,
+                        referrer_url,
+                        target_url,
+                        action_label,
+                        element_tag,
+                        element_role,
+                        session_id,
+                        visitor_id,
+                        user_email,
+                        auth_state,
+                        selected_country,
+                        selected_locale,
+                        browser_language,
+                        timezone,
+                        screen_width,
+                        screen_height,
+                        viewport_width,
+                        viewport_height,
+                        user_agent,
+                        ip_address,
+                        ip_hash,
+                        forwarded_for,
+                        country_code,
+                        country_name,
+                        region_name,
+                        city_name,
+                        location_source,
+                        request_host,
+                        request_method,
+                        source,
+                        metadata_json
+                    FROM telemetry_events
+                    WHERE occurred_at >= %s
+                    """,
+                    [window_start],
+                )
+                return list(cursor.fetchall() or [])
+        finally:
+            connection.close()
+
+    def _load_recent_rows(self, days: int) -> List[Dict[str, Any]]:
+        fallback_rows = self._load_fallback_rows()
+
+        try:
+            mysql_rows = self._load_recent_mysql_rows(days)
+        except Exception:
+            mysql_rows = []
+
+        # Merge fallback writes into read results so local telemetry stays visible even
+        # when the runtime MySQL user can read telemetry_events but cannot insert into it.
+        return self._merge_rows(mysql_rows, fallback_rows)
+
     def _resolved_country(self, row: Dict[str, Any]) -> str:
         for key in ("country_name", "country_code", "selected_country"):
             candidate = _clean_text(row.get(key))
@@ -518,193 +624,9 @@ class CouponleoTelemetryRepository:
 
     def summary(self, days: int = 7, limit: int = 10) -> Dict[str, Any]:
         try:
-            if not self.ensure_table():
-                raise RuntimeError("Telemetry MySQL unavailable.")
-
             safe_days = max(1, min(int(days or Config.TELEMETRY_DEFAULT_WINDOW_DAYS), 90))
             safe_limit = max(1, min(int(limit or 10), 50))
-            window_start = datetime.utcnow() - timedelta(days=safe_days)
-
-            connection = self._connect_mysql()
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute(
-                        """
-                        SELECT
-                            COUNT(1) AS totalEvents,
-                            SUM(CASE WHEN event_type = 'page_view' THEN 1 ELSE 0 END) AS pageViews,
-                            COUNT(DISTINCT NULLIF(session_id, '')) AS uniqueSessions,
-                            COUNT(
-                                DISTINCT CASE
-                                    WHEN COALESCE(NULLIF(visitor_id, ''), NULLIF(ip_hash, '')) = '' THEN NULL
-                                    ELSE COALESCE(NULLIF(visitor_id, ''), NULLIF(ip_hash, ''))
-                                END
-                            ) AS uniqueVisitors,
-                            COUNT(
-                                DISTINCT CASE
-                                    WHEN COALESCE(
-                                        CASE WHEN LOWER(TRIM(country_name)) IN ('', 'all', 'all markets') THEN NULL ELSE country_name END,
-                                        CASE WHEN LOWER(TRIM(country_code)) IN ('', 'xx', 't1') THEN NULL ELSE country_code END,
-                                        CASE WHEN LOWER(TRIM(selected_country)) IN ('', 'all', 'all markets') THEN NULL ELSE selected_country END
-                                    ) IS NULL THEN NULL
-                                    ELSE COALESCE(
-                                        CASE WHEN LOWER(TRIM(country_name)) IN ('', 'all', 'all markets') THEN NULL ELSE country_name END,
-                                        CASE WHEN LOWER(TRIM(country_code)) IN ('', 'xx', 't1') THEN NULL ELSE country_code END,
-                                        CASE WHEN LOWER(TRIM(selected_country)) IN ('', 'all', 'all markets') THEN NULL ELSE selected_country END
-                                    )
-                                END
-                            ) AS countryCount
-                        FROM telemetry_events
-                        WHERE occurred_at >= %s
-                        """,
-                        [window_start],
-                    )
-                    totals_row = cursor.fetchone() or {}
-
-                    cursor.execute(
-                        """
-                        SELECT
-                            page_path,
-                            COUNT(1) AS views,
-                            COUNT(
-                                DISTINCT CASE
-                                    WHEN COALESCE(NULLIF(visitor_id, ''), NULLIF(ip_hash, '')) = '' THEN NULL
-                                    ELSE COALESCE(NULLIF(visitor_id, ''), NULLIF(ip_hash, ''))
-                                END
-                            ) AS uniqueVisitors,
-                            MAX(occurred_at) AS lastSeenAt
-                        FROM telemetry_events
-                        WHERE occurred_at >= %s
-                          AND event_type = 'page_view'
-                          AND page_path <> ''
-                        GROUP BY page_path
-                        ORDER BY views DESC, uniqueVisitors DESC, page_path ASC
-                        LIMIT %s
-                        """,
-                        [window_start, safe_limit],
-                    )
-                    top_pages = cursor.fetchall()
-
-                    cursor.execute(
-                        """
-                        SELECT
-                            event_type,
-                            COALESCE(NULLIF(action_label, ''), NULLIF(event_name, ''), event_type) AS label,
-                            COUNT(1) AS total,
-                            MAX(occurred_at) AS lastSeenAt
-                        FROM telemetry_events
-                        WHERE occurred_at >= %s
-                          AND event_type <> 'page_view'
-                        GROUP BY event_type, label
-                        ORDER BY total DESC, lastSeenAt DESC
-                        LIMIT %s
-                        """,
-                        [window_start, safe_limit],
-                    )
-                    top_actions = cursor.fetchall()
-
-                    cursor.execute(
-                        """
-                        SELECT
-                            country,
-                            COUNT(1) AS total,
-                            COUNT(
-                                DISTINCT CASE
-                                    WHEN COALESCE(NULLIF(visitor_id, ''), NULLIF(ip_hash, '')) = '' THEN NULL
-                                    ELSE COALESCE(NULLIF(visitor_id, ''), NULLIF(ip_hash, ''))
-                                END
-                            ) AS uniqueVisitors
-                        FROM (
-                            SELECT
-                                COALESCE(
-                                    CASE WHEN LOWER(TRIM(country_name)) IN ('', 'all', 'all markets') THEN NULL ELSE country_name END,
-                                    CASE WHEN LOWER(TRIM(country_code)) IN ('', 'xx', 't1') THEN NULL ELSE country_code END,
-                                    CASE WHEN LOWER(TRIM(selected_country)) IN ('', 'all', 'all markets') THEN NULL ELSE selected_country END
-                                ) AS country,
-                                visitor_id,
-                                ip_hash
-                            FROM telemetry_events
-                            WHERE occurred_at >= %s
-                        ) AS resolved_events
-                        WHERE country IS NOT NULL
-                        GROUP BY country
-                        ORDER BY total DESC, uniqueVisitors DESC, country ASC
-                        LIMIT %s
-                        """,
-                        [window_start, safe_limit],
-                    )
-                    top_countries = cursor.fetchall()
-
-                    cursor.execute(
-                        """
-                        SELECT
-                            DATE(occurred_at) AS day,
-                            COUNT(1) AS totalEvents,
-                            SUM(CASE WHEN event_type = 'page_view' THEN 1 ELSE 0 END) AS pageViews,
-                            COUNT(
-                                DISTINCT CASE
-                                    WHEN COALESCE(NULLIF(visitor_id, ''), NULLIF(ip_hash, '')) = '' THEN NULL
-                                    ELSE COALESCE(NULLIF(visitor_id, ''), NULLIF(ip_hash, ''))
-                                END
-                            ) AS uniqueVisitors
-                        FROM telemetry_events
-                        WHERE occurred_at >= %s
-                        GROUP BY day
-                        ORDER BY day ASC
-                        """,
-                        [window_start],
-                    )
-                    timeline = cursor.fetchall()
-            finally:
-                connection.close()
-
-            return {
-                "enabled": True,
-                "windowDays": safe_days,
-                "generatedAt": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
-                "totals": {
-                    "totalEvents": int(totals_row.get("totalEvents") or 0),
-                    "pageViews": int(totals_row.get("pageViews") or 0),
-                    "uniqueSessions": int(totals_row.get("uniqueSessions") or 0),
-                    "uniqueVisitors": int(totals_row.get("uniqueVisitors") or 0),
-                    "countryCount": int(totals_row.get("countryCount") or 0),
-                },
-                "topPages": [
-                    {
-                        "pagePath": _clean_text(row.get("page_path")),
-                        "views": int(row.get("views") or 0),
-                        "uniqueVisitors": int(row.get("uniqueVisitors") or 0),
-                        "lastSeenAt": _serialize_datetime(row.get("lastSeenAt")),
-                    }
-                    for row in top_pages
-                ],
-                "topActions": [
-                    {
-                        "eventType": _clean_text(row.get("event_type")),
-                        "label": _clean_text(row.get("label")),
-                        "total": int(row.get("total") or 0),
-                        "lastSeenAt": _serialize_datetime(row.get("lastSeenAt")),
-                    }
-                    for row in top_actions
-                ],
-                "topCountries": [
-                    {
-                        "country": _clean_text(row.get("country")) or "Unknown",
-                        "total": int(row.get("total") or 0),
-                        "uniqueVisitors": int(row.get("uniqueVisitors") or 0),
-                    }
-                    for row in top_countries
-                ],
-                "timeline": [
-                    {
-                        "day": _serialize_date(row.get("day")),
-                        "totalEvents": int(row.get("totalEvents") or 0),
-                        "pageViews": int(row.get("pageViews") or 0),
-                        "uniqueVisitors": int(row.get("uniqueVisitors") or 0),
-                    }
-                    for row in timeline
-                ],
-            }
+            return self._summary_from_rows(self._load_recent_rows(safe_days), days=safe_days, limit=safe_limit)
         except Exception:
             return self._summary_from_rows(self._load_fallback_rows(), days=days, limit=limit)
 
@@ -717,89 +639,15 @@ class CouponleoTelemetryRepository:
         page_path: str = "",
     ) -> Tuple[List[Dict[str, Any]], int]:
         try:
-            if not self.ensure_table():
-                raise RuntimeError("Telemetry MySQL unavailable.")
-
-            safe_page = max(1, int(page or 1))
-            safe_limit = max(1, min(int(limit or 50), 200))
             safe_days = max(1, min(int(days or Config.TELEMETRY_DEFAULT_WINDOW_DAYS), 90))
-            offset = (safe_page - 1) * safe_limit
-            window_start = datetime.utcnow() - timedelta(days=safe_days)
-
-            clauses = ["occurred_at >= %s"]
-            params: List[Any] = [window_start]
-
-            normalized_event_type = _clean_text(event_type).lower()
-            if normalized_event_type:
-                clauses.append("LOWER(event_type) = %s")
-                params.append(normalized_event_type)
-
-            normalized_page_path = _clean_text(page_path)
-            if normalized_page_path:
-                clauses.append("page_path = %s")
-                params.append(normalized_page_path)
-
-            where_clause = " AND ".join(clauses)
-
-            connection = self._connect_mysql()
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute(f"SELECT COUNT(1) AS total FROM telemetry_events WHERE {where_clause}", params)
-                    total = int((cursor.fetchone() or {}).get("total") or 0)
-
-                    cursor.execute(
-                        f"""
-                        SELECT
-                            event_id,
-                            occurred_at,
-                            received_at,
-                            event_type,
-                            event_name,
-                            page_path,
-                            page_query,
-                            page_title,
-                            referrer_url,
-                            target_url,
-                            action_label,
-                            element_tag,
-                            element_role,
-                            session_id,
-                            visitor_id,
-                            user_email,
-                            auth_state,
-                            selected_country,
-                            selected_locale,
-                            browser_language,
-                            timezone,
-                            screen_width,
-                            screen_height,
-                            viewport_width,
-                            viewport_height,
-                            user_agent,
-                            ip_address,
-                            ip_hash,
-                            forwarded_for,
-                            country_code,
-                            country_name,
-                            region_name,
-                            city_name,
-                            location_source,
-                            request_host,
-                            request_method,
-                            source,
-                            metadata_json
-                        FROM telemetry_events
-                        WHERE {where_clause}
-                        ORDER BY occurred_at DESC, id DESC
-                        LIMIT %s OFFSET %s
-                        """,
-                        [*params, safe_limit, offset],
-                    )
-                    rows = cursor.fetchall()
-            finally:
-                connection.close()
-
-            return [self._serialize_event(row) for row in rows], total
+            return self._list_events_from_rows(
+                self._load_recent_rows(safe_days),
+                page=page,
+                limit=limit,
+                days=safe_days,
+                event_type=event_type,
+                page_path=page_path,
+            )
         except Exception:
             return self._list_events_from_rows(
                 self._load_fallback_rows(),

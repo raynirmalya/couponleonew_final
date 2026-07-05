@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import secrets
 import time
@@ -59,7 +60,10 @@ def _first_present(values: Iterable[Any]) -> str:
 
 
 def _request_host() -> str:
-    return (request.headers.get("X-Forwarded-Host") or request.host or "").split(":")[0].strip().lower()
+    raw_host = (request.headers.get("X-Forwarded-Host") or request.host or "").strip().lower()
+    if raw_host.startswith("[") and "]" in raw_host:
+        return raw_host[1 : raw_host.index("]")]
+    return raw_host.split(":")[0].strip()
 
 
 def _client_ip() -> str:
@@ -79,14 +83,31 @@ def _forwarded_for() -> str:
 
 
 def _is_loopback_request() -> bool:
-    client_ip = _client_ip().lower()
+    client_ip = _client_ip().strip().lower()
     host = _request_host()
-    return client_ip in _LOOPBACK_VALUES or host in _LOOPBACK_VALUES
+    request_root = _clean_text(getattr(request, "url_root", "")).lower()
+    if host in _LOOPBACK_VALUES:
+        return True
+    if client_ip in _LOOPBACK_VALUES:
+        return True
+    if any(loopback in request_root for loopback in ("127.0.0.1", "localhost", "[::1]")):
+        return True
+
+    candidate_ip = client_ip
+    if candidate_ip.startswith("::ffff:"):
+        candidate_ip = candidate_ip.split("::ffff:", 1)[1]
+
+    try:
+        return ipaddress.ip_address(candidate_ip).is_loopback
+    except ValueError:
+        return False
 
 
 def _admin_authorized() -> bool:
     configured_key = _clean_text(Config.TELEMETRY_ADMIN_KEY)
     provided_key = _clean_text(request.headers.get("X-Telemetry-Admin-Key"))
+    if _is_loopback_request() and not configured_key:
+        return True
     return bool(
         _is_loopback_request()
         and configured_key
