@@ -1525,7 +1525,38 @@ class CouponLeoRepository:
         if cached is not None:
             return cached
 
-        prefer_live_store_query = self._db_configured() and bool(_clean_text(store))
+        normalized_store = _clean_text(store)
+        prefer_live_store_query = self._db_configured() and bool(normalized_store)
+        exact_store_page_query = (
+            prefer_live_store_query
+            and not _clean_text(query)
+            and not _clean_text(category)
+            and not _clean_text(location)
+            and featured is None
+            and (active is None or active)
+        )
+
+        if exact_store_page_query:
+            try:
+                store_record = self.get_store_live(normalized_store)
+                store_name = _clean_text((store_record or {}).get("name"))
+                if store_name:
+                    total, raw_coupons, location_lookup = self._lookup_active_coupons_for_store(
+                        store_name,
+                        normalized_limit,
+                        offset=(normalized_page - 1) * normalized_limit,
+                    )
+                    coupons = [
+                        coupon
+                        for coupon in (
+                            self._build_coupon_record(raw_coupon, None, location_lookup)
+                            for raw_coupon in raw_coupons
+                        )
+                        if coupon is not None
+                    ]
+                    return self._write_direct_cache(cache_key, (coupons, total))
+            except Exception:
+                pass
 
         if not prefer_live_store_query and (active is None or active):
             try:
@@ -2879,6 +2910,7 @@ class CouponLeoRepository:
         self,
         store_name: str,
         coupon_limit: int,
+        offset: int = 0,
     ) -> tuple[int, List[Dict[str, Any]], Dict[str, str]]:
         normalized_store_name = _clean_text(store_name)
         if not normalized_store_name:
@@ -2935,9 +2967,9 @@ class CouponLeoRepository:
                       AND TRIM(COALESCE(store, '')) NOT IN ('', 'unknown')
                       AND (end_date IS NULL OR end_date >= CURDATE())
                     ORDER BY rating DESC, id DESC
-                    LIMIT %s
+                    LIMIT %s OFFSET %s
                     """,
-                    (normalized_store_name, int(coupon_limit)),
+                    (normalized_store_name, int(coupon_limit), max(0, int(offset or 0))),
                 )
                 raw_coupons = cursor.fetchall()
                 location_lookup = self._load_location_lookup(cursor)
