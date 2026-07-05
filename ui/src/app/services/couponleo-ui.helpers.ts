@@ -10,6 +10,7 @@ import {
   type CouponleoGeneratedCategoryTheme,
 } from './couponleo-category-assets.generated';
 import { couponleoExpiryLabels, translateCouponleoPhrase } from './couponleo-i18n.catalog';
+import { isCouponleoLocalizedPublicPath, localizeCouponleoPathname } from './couponleo-locale-paths';
 import type {
   CouponleoCategory,
   CouponleoCoupon,
@@ -361,6 +362,12 @@ export function buildStoreRoute(slug: string): string {
 
 export function buildCategoryRoute(slug: string): string {
   return `/categories/${encodeURIComponent(slug)}`;
+}
+
+export function localizeCouponleoRoute(path: string, locale: string): string {
+  return isCouponleoLocalizedPublicPath(path)
+    ? localizeCouponleoPathname(path, locale)
+    : path;
 }
 
 export function normalizeCountryRouteValue(value: string | null | undefined): string {

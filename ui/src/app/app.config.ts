@@ -36,9 +36,14 @@ function parseHostname(hostHeader: string): string {
 
 function couponleoApiBaseUrlFactory(): string {
   const platformId = inject(PLATFORM_ID);
+
+  if (!isPlatformServer(platformId)) {
+    return '/couponleo/api';
+  }
+
   const request = injectRequest();
 
-  if (!isPlatformServer(platformId) || !request) {
+  if (!request) {
     return '/couponleo/api';
   }
 

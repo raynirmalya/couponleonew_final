@@ -108,6 +108,7 @@ const mockStores: CouponleoStore[] = [
     name: 'dooxi.com',
     slug: 'dooxi-com',
     headline: 'Indian home decor and style deals.',
+    websiteDescription: 'dooxi.com focuses on design-led home decor, furniture accents, and practical styling upgrades.',
     location: 'India',
     category: 'Fashion',
     activeCoupons: 5,
@@ -130,6 +131,7 @@ const mockStores: CouponleoStore[] = [
     name: 'FlyAway',
     slug: 'flyaway',
     headline: 'Global travel savings.',
+    websiteDescription: 'FlyAway highlights flight discounts, hotel bundles, and time-sensitive trip planning offers.',
     location: 'Global',
     category: 'Travel',
     activeCoupons: 4,
@@ -410,6 +412,14 @@ describe('CouponLeo public pages', () => {
 
     await resolveLoader(fixture);
 
+    expect(fixture.nativeElement.textContent).toContain('Discover smarter');
+    expect(fixture.nativeElement.textContent).toContain('Top Stores');
+    expect(fixture.nativeElement.textContent).toContain('How shoppers use CouponLeo to find better deals');
+    expect(fixture.nativeElement.textContent).not.toContain('Why this richer homepage copy helps SEO');
+    expect(fixture.nativeElement.textContent).not.toContain('Store pages show what the merchant sells');
+    expect(queryHrefs(fixture, '.couponleo-copy-link')).toContain('/stores/dooxi-com?country=India');
+    expect(queryHrefs(fixture, '.couponleo-copy-link')).toContain('/categories/fashion?country=India');
+
     setSearch(fixture, 'Fashion');
 
     expect(queryTexts(fixture, '.couponleo-deal-card')).toEqual([expect.stringContaining('dooxi.com')]);
@@ -418,7 +428,7 @@ describe('CouponLeo public pages', () => {
     expect(queryTexts(fixture, '.couponleo-store-pill').join(' ')).not.toContain('TechMart');
     expect((fixture.nativeElement.querySelector('.couponleo-orb-card') as HTMLAnchorElement | null)?.getAttribute('href'))
       .toContain('/categories/fashion?country=India');
-    expect((fixture.nativeElement.querySelector('.couponleo-store-pill__link') as HTMLAnchorElement | null)?.getAttribute('href'))
+    expect((fixture.nativeElement.querySelector('.couponleo-store-pill__body') as HTMLAnchorElement | null)?.getAttribute('href'))
       .toContain('/stores/dooxi-com?country=India');
   });
 
@@ -509,7 +519,13 @@ describe('CouponLeo public pages', () => {
 
     expect(fixture.nativeElement.textContent).toContain('Fashion');
     expect(fixture.nativeElement.textContent).toContain('Deals in Fashion');
+    expect(fixture.nativeElement.textContent).toContain('Why Fashion is worth a closer look');
+    expect(fixture.nativeElement.textContent).toContain('Fashion coupon codes');
+    expect(fixture.nativeElement.textContent).toContain('Fashion offers in India');
+    expect(queryTexts(fixture, '.couponleo-category-store-card').join(' ')).toContain('shoppers in India');
     expect(queryTexts(fixture, '.couponleo-category-store-card').join(' ')).toContain('dooxi.com');
+    expect(fixture.nativeElement.textContent).toContain('Questions shoppers ask before comparing this category');
+    expect(fixture.nativeElement.textContent).toContain('Does market selection change Fashion deals?');
     expect(queryTexts(fixture, '.couponleo-deal-card')).toEqual([expect.stringContaining('dooxi.com')]);
     expect((fixture.nativeElement.querySelector('.couponleo-category-store-card a.couponleo-button') as HTMLAnchorElement | null)?.getAttribute('href'))
       .toContain('/stores/dooxi-com?country=India');
@@ -526,9 +542,30 @@ describe('CouponLeo public pages', () => {
     await resolveLoader(fixture);
 
     expect(fixture.nativeElement.textContent).toContain('Deals from dooxi.com');
+    expect(fixture.nativeElement.textContent).toContain('Why dooxi.com is worth checking before you buy');
+    expect(fixture.nativeElement.textContent).toContain('dooxi.com coupon codes');
+    expect(fixture.nativeElement.textContent).toContain('Fashion deals in India');
+    expect(fixture.nativeElement.textContent).toContain('design-led home decor, furniture accents, and practical styling upgrades');
+    expect(fixture.nativeElement.textContent).toContain('Questions shoppers usually ask before visiting this store');
+    expect(fixture.nativeElement.textContent).toContain('Is dooxi.com worth checking for shoppers in India?');
     expect(queryTexts(fixture, '.couponleo-deal-card')).toEqual([expect.stringContaining('10% off')]);
     expect((fixture.nativeElement.querySelector('.couponleo-store-deals-hero__actions a') as HTMLAnchorElement | null)?.getAttribute('href'))
       .toContain('/stores?country=India');
+  });
+
+  it('keeps the global store meta description natural on unfiltered store pages', async () => {
+    const fixture = await createFixture(StoreDealsPage, [
+      {
+        provide: ActivatedRoute,
+        useValue: createActivatedRouteStub({ slug: 'flyaway' }),
+      },
+    ]);
+
+    await resolveLoader(fixture);
+
+    expect(document.title).toBe('FlyAway Coupon Codes, Promo Codes & Deals | CouponLeo');
+    expect(document.querySelector('meta[name="description"]')?.getAttribute('content'))
+      .toContain('for shoppers comparing options across markets');
   });
 
   it('renders live source stories on the blog page from the articles API', async () => {

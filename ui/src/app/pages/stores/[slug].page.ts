@@ -4,10 +4,15 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { type PageServerLoad } from '@analogjs/router';
 import { combineLatest, map, of, startWith, debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
 import { injectResponse } from '@analogjs/router/tokens';
+import { Meta, Title } from '@angular/platform-browser';
 import {
   CouponleoCouponDialogComponent,
   type CouponleoCouponReveal,
 } from '../../components/couponleo-coupon-dialog.component';
+import {
+  CouponleoBreadcrumbsComponent,
+  type CouponleoBreadcrumbItem,
+} from '../../components/couponleo-breadcrumbs.component';
 import { CouponleoBrandmarkComponent } from '../../components/couponleo-brandmark.component';
 import { CouponleoEonIconComponent } from '../../components/couponleo-eon-icon.component';
 import { CouponleoFavoriteButtonComponent } from '../../components/couponleo-favorite-button.component';
@@ -24,6 +29,16 @@ import { couponleoCouponLogoUrl, couponleoStoreLogoUrl } from '../../services/co
 import { createLoadingState, withHydratedRequestState } from '../../services/couponleo-request-state.helpers';
 import { createDynamicRouteMeta, humanizeSlug } from '../../services/couponleo-route-meta';
 import { CouponleoSavedService } from '../../services/couponleo-saved.service';
+import { CouponleoSeoSyncService } from '../../services/couponleo-seo-sync.service';
+import {
+  buildCouponleoStoreKeywordHighlightsForMarket,
+  buildCouponleoStoreCardDescriptionForMarket,
+  buildCouponleoStoreFaqItems,
+  buildCouponleoStoreMetaDescription,
+  buildCouponleoStoreSeoParagraphs,
+  extractCouponleoWebsiteHost,
+  resolveCouponleoStoreDescription,
+} from '../../services/couponleo-seo-copy.helpers';
 import {
   fetchCouponleoData,
   fetchCouponleoList,
@@ -34,6 +49,7 @@ import {
   buildStoreRoute,
   formatCount,
   formatExpiryLabel,
+  localizeCouponleoRoute,
   locationFilterForCountry,
   normalizeCountryRouteValue,
 } from '../../services/couponleo-ui.helpers';
@@ -52,14 +68,28 @@ interface StorePageCouponCard extends CouponleoCouponReveal {
   fallbackLogoUrl: string;
 }
 
+interface StoreSeoFact {
+  copy: string;
+  label: string;
+  value: string;
+}
+
 const storeDealsPageSize = 12;
 
 export const routeMeta = createDynamicRouteMeta((route) => {
   const storeName = humanizeSlug(route.paramMap.get('slug') ?? 'store');
+  const country = normalizeCountryRouteValue(route.queryParamMap.get('country'));
+
+  if (country !== 'all') {
+    return {
+      title: `${storeName} Coupon Codes, Promo Codes & Deals in ${country} | CouponLeo`,
+      description: `Compare ${storeName} coupon codes, promo codes, and live store offers for shoppers in ${country} before you head to checkout.`,
+    };
+  }
 
   return {
-    title: `${storeName} Store Deals | CouponLeo`,
-    description: `Browse live ${storeName} coupons, active offers, and verified store deals on CouponLeo.`,
+    title: `${storeName} Coupon Codes, Promo Codes & Deals | CouponLeo`,
+    description: `Compare ${storeName} coupon codes, promo codes, and live store deals before you decide whether the brand is worth opening today.`,
   };
 });
 
@@ -109,6 +139,7 @@ export async function load(pageServerLoad: PageServerLoad) {
   selector: 'app-store-deals-page',
   imports: [
     RouterLink,
+    CouponleoBreadcrumbsComponent,
     CouponleoCouponDialogComponent,
     CouponleoBrandmarkComponent,
     CouponleoEonIconComponent,
@@ -117,6 +148,8 @@ export async function load(pageServerLoad: PageServerLoad) {
     CouponleoPaginationComponent,
   ],
   template: `
+    <app-couponleo-breadcrumbs [items]="breadcrumbs()"></app-couponleo-breadcrumbs>
+
     <section class="couponleo-page-hero couponleo-page-hero--warm couponleo-store-deals-hero">
       <div class="couponleo-store-deals-hero__top">
         <div class="couponleo-store-deals-hero__copy">
@@ -127,7 +160,7 @@ export async function load(pageServerLoad: PageServerLoad) {
             <div class="couponleo-store-deals-hero__identity-copy">
               <span class="couponleo-eyebrow">{{ storeLocation() }}</span>
               <h1>{{ storeName() }}</h1>
-              <p>{{ storeHeadline() }}</p>
+              <p>{{ storeDescription() }}</p>
 
               <div class="couponleo-store-deals-hero__meta">
                 <span>{{ storeCategory() }}</span>
@@ -139,11 +172,17 @@ export async function load(pageServerLoad: PageServerLoad) {
         </div>
 
         <div class="couponleo-store-deals-hero__actions">
-          <a class="couponleo-button couponleo-button--ghost" routerLink="/stores" [queryParams]="countryRouteQuery()">{{ labels().backToStores }}</a>
+          <a
+            class="couponleo-button couponleo-button--ghost"
+            [routerLink]="localizeRoute('/stores')"
+            [queryParams]="countryRouteQuery()"
+            data-telemetry-event="store_back_to_directory"
+            [attr.data-telemetry-label]="labels().backToStores"
+          >{{ labels().backToStores }}</a>
         </div>
       </div>
 
-      <form class="couponleo-searchbar" (submit)="$event.preventDefault()">
+      <form class="couponleo-searchbar" (submit)="$event.preventDefault()" data-telemetry-event="store_search_submit" [attr.data-telemetry-label]="storeName()">
         <span class="couponleo-searchbar__icon" aria-hidden="true">
           <app-couponleo-eon-icon [svg]="searchIconSvg"></app-couponleo-eon-icon>
         </span>
@@ -152,9 +191,17 @@ export async function load(pageServerLoad: PageServerLoad) {
           [placeholder]="searchPlaceholder()"
           [attr.aria-label]="labels().searchStoreDeals"
           [value]="searchQuery()"
+          data-telemetry-event="store_search_input"
+          [attr.data-telemetry-label]="storeName()"
           (input)="updateSearch($event)"
         >
-        <button type="submit" class="couponleo-searchbar__button" [attr.aria-label]="i18n.phrase('Search')">
+        <button
+          type="submit"
+          class="couponleo-searchbar__button"
+          [attr.aria-label]="i18n.phrase('Search')"
+          data-telemetry-event="store_search_button"
+          [attr.data-telemetry-label]="storeName()"
+        >
           <app-couponleo-eon-icon [svg]="searchIconSvg"></app-couponleo-eon-icon>
         </button>
       </form>
@@ -181,10 +228,87 @@ export async function load(pageServerLoad: PageServerLoad) {
         <div class="couponleo-empty-card">
           <h3>{{ labels().storeNotFound }}</h3>
           <p>{{ labels().storeNotFoundCopy }}</p>
-          <a class="couponleo-button couponleo-button--solid" routerLink="/stores" [queryParams]="countryRouteQuery()">{{ i18n.phrase('Browse Stores') }}</a>
+          <a
+            class="couponleo-button couponleo-button--solid"
+            [routerLink]="localizeRoute('/stores')"
+            [queryParams]="countryRouteQuery()"
+            data-telemetry-event="store_not_found_browse_stores"
+            [attr.data-telemetry-label]="i18n.phrase('Browse Stores')"
+          >{{ i18n.phrase('Browse Stores') }}</a>
         </div>
       </section>
     } @else {
+      <section class="couponleo-page-section">
+        <div class="couponleo-copy-card couponleo-store-seo-card">
+          <div class="couponleo-store-seo-card__copy">
+            <span class="couponleo-store-seo-card__eyebrow">{{ labels().storeOverview }}</span>
+            <h2>{{ storeOverviewHeading() }}</h2>
+
+            @for (paragraph of storeSeoParagraphs(); track paragraph) {
+              <p>{{ paragraph }}</p>
+            }
+
+            @if (storeKeywordHighlights().length > 0) {
+              <div class="couponleo-store-seo-card__keywords">
+                <span>{{ labels().searchThemes }}</span>
+                <div class="couponleo-store-seo-card__keyword-list">
+                  @for (keyword of storeKeywordHighlights(); track keyword) {
+                    <span class="couponleo-store-seo-card__keyword">{{ keyword }}</span>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+
+          <div class="couponleo-store-seo-card__facts">
+            @for (fact of storeSeoFacts(); track fact.label) {
+              <article class="couponleo-card couponleo-store-seo-card__fact">
+                <span class="couponleo-store-seo-card__fact-label">{{ fact.label }}</span>
+                <h3>{{ fact.value }}</h3>
+                <p>{{ fact.copy }}</p>
+              </article>
+            }
+
+            @if (storeWebsiteUrl()) {
+              <a
+                class="couponleo-button couponleo-button--ghost couponleo-store-seo-card__link"
+                [href]="storeWebsiteUrl()"
+                target="_blank"
+                rel="noreferrer"
+                data-telemetry-event="store_official_website_open"
+                [attr.data-telemetry-label]="storeWebsiteHost()"
+              >
+                {{ labels().visitWebsite }}
+              </a>
+            }
+          </div>
+        </div>
+      </section>
+
+      @if (storeFaqs().length > 0) {
+        <section class="couponleo-page-section">
+          <div class="couponleo-copy-card couponleo-store-faq-card">
+            <div class="couponleo-section-heading couponleo-section-heading--stacked">
+              <h2>{{ storeFaqHeading() }}</h2>
+              <p>{{ storeFaqIntro() }}</p>
+            </div>
+
+            <div class="couponleo-store-faq-grid">
+              @for (faq of storeFaqs(); track faq.question) {
+                <article
+                  class="couponleo-store-faq-item"
+                  [attr.data-couponleo-faq-question]="faq.question"
+                  [attr.data-couponleo-faq-answer]="faq.answer"
+                >
+                  <h3>{{ faq.question }}</h3>
+                  <p>{{ faq.answer }}</p>
+                </article>
+              }
+            </div>
+          </div>
+        </section>
+      }
+
       <section class="couponleo-page-section">
         <div class="couponleo-section-heading">
           <h2>{{ dealsHeading() }}</h2>
@@ -220,10 +344,22 @@ export async function load(pageServerLoad: PageServerLoad) {
                 <span class="couponleo-store-deals-card__meta">{{ deal.title }} | {{ deal.category }}</span>
                 <span class="couponleo-store-deals-card__expires">{{ deal.expires }}</span>
                 <div class="couponleo-deal-card__actions">
-                  <button type="button" class="couponleo-code couponleo-code--masked" (click)="openCoupon(deal)">
+                  <button
+                    type="button"
+                    class="couponleo-code couponleo-code--masked"
+                    (click)="openCoupon(deal)"
+                    data-telemetry-event="store_deal_code_open"
+                    [attr.data-telemetry-label]="storeName() + ' ' + deal.offer"
+                  >
                     {{ maskCode(deal.code) }}
                   </button>
-                  <button type="button" class="couponleo-button couponleo-button--solid" (click)="openCoupon(deal)">
+                  <button
+                    type="button"
+                    class="couponleo-button couponleo-button--solid"
+                    (click)="openCoupon(deal)"
+                    data-telemetry-event="store_deal_show_code"
+                    [attr.data-telemetry-label]="storeName() + ' ' + deal.offer"
+                  >
                     {{ i18n.phrase('Show Code') }}
                   </button>
                 </div>
@@ -371,6 +507,191 @@ export async function load(pageServerLoad: PageServerLoad) {
       line-height: 1.6;
     }
 
+    .couponleo-store-seo-card {
+      position: relative;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+      gap: 22px;
+      background:
+        radial-gradient(circle at top right, rgba(255, 188, 120, 0.2), transparent 32%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 247, 238, 0.96) 52%, rgba(248, 251, 255, 0.96) 100%);
+      box-shadow: 0 24px 48px rgba(18, 35, 77, 0.1);
+    }
+
+    .couponleo-store-seo-card__copy,
+    .couponleo-store-seo-card__facts {
+      display: grid;
+      gap: 20px;
+    }
+
+    .couponleo-store-seo-card__copy h2,
+    .couponleo-store-seo-card__fact h3 {
+      margin: 0;
+      color: var(--couponleo-navy);
+    }
+
+    .couponleo-store-seo-card__copy h2 {
+      font-size: clamp(2.3rem, 3vw, 3.2rem);
+      max-width: 15ch;
+      line-height: 1.02;
+      letter-spacing: -0.055em;
+    }
+
+    .couponleo-store-seo-card__eyebrow,
+    .couponleo-store-seo-card__fact-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.7rem;
+      width: auto;
+      max-width: none;
+      font-size: 0.95rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+      text-align: left;
+      text-wrap: balance;
+      white-space: nowrap;
+    }
+
+    .couponleo-store-seo-card__eyebrow {
+      color: var(--couponleo-navy);
+    }
+
+    .couponleo-store-seo-card__fact-label {
+      color: #c46a23;
+    }
+
+    .couponleo-store-seo-card__eyebrow::before,
+    .couponleo-store-seo-card__fact-label::before {
+      content: '';
+      display: inline-block;
+      flex: 0 0 auto;
+      width: 0.9rem;
+      height: 0.9rem;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #ffbe5c 0%, #ff7d3d 100%);
+      box-shadow: 0 10px 20px rgba(255, 150, 71, 0.3);
+    }
+
+    .couponleo-store-seo-card__copy p,
+    .couponleo-store-seo-card__keywords span,
+    .couponleo-store-seo-card__fact p {
+      margin: 0;
+      color: var(--couponleo-muted);
+    }
+
+    .couponleo-store-seo-card__copy p {
+      max-width: none;
+      line-height: 1.72;
+    }
+
+    .couponleo-store-seo-card__keywords {
+      display: grid;
+      gap: 12px;
+    }
+
+    .couponleo-store-seo-card__keywords > span {
+      font-size: 0.92rem;
+      font-weight: 800;
+      color: var(--couponleo-navy);
+    }
+
+    .couponleo-store-seo-card__keyword-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .couponleo-store-seo-card__keyword {
+      display: inline-flex;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(22, 36, 74, 0.05);
+      border: 1px solid rgba(22, 36, 74, 0.06);
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    .couponleo-store-seo-card__facts {
+      align-content: start;
+    }
+
+    .couponleo-store-seo-card__fact {
+      position: relative;
+      overflow: hidden;
+      display: grid;
+      align-content: start;
+      justify-items: start;
+      min-height: 0;
+      gap: 12px;
+      padding: 22px 24px 22px 28px;
+      border-radius: 28px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(255, 250, 244, 0.9) 100%);
+      border: 1px solid rgba(22, 36, 74, 0.06);
+      box-shadow: 0 18px 38px rgba(18, 35, 77, 0.07);
+    }
+
+    .couponleo-store-seo-card__fact::before {
+      content: '';
+      position: absolute;
+      inset: 20px auto 20px 14px;
+      width: 4px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #ffb14a 0%, #ff7a3d 100%);
+    }
+
+    .couponleo-store-seo-card__fact h3 {
+      font-size: clamp(1.5rem, 2.05vw, 2.1rem);
+      line-height: 1.08;
+      overflow-wrap: anywhere;
+    }
+
+    .couponleo-store-seo-card__fact p {
+      line-height: 1.64;
+    }
+
+    .couponleo-store-seo-card__link {
+      width: 100%;
+      min-height: 3.35rem;
+    }
+
+    .couponleo-store-faq-card,
+    .couponleo-store-faq-grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .couponleo-store-faq-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .couponleo-store-faq-item {
+      display: grid;
+      gap: 12px;
+      padding: 22px 24px;
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 251, 255, 0.94) 100%);
+      border: 1px solid rgba(22, 36, 74, 0.08);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.72);
+    }
+
+    .couponleo-store-faq-item h3,
+    .couponleo-store-faq-item p {
+      margin: 0;
+    }
+
+    .couponleo-store-faq-item h3 {
+      color: var(--couponleo-navy);
+      font-size: 1.15rem;
+      line-height: 1.35;
+    }
+
+    .couponleo-store-faq-item p {
+      color: var(--couponleo-muted);
+      line-height: 1.72;
+    }
+
     @media (max-width: 780px) {
       .couponleo-store-deals-hero__top {
         display: grid;
@@ -397,6 +718,19 @@ export async function load(pageServerLoad: PageServerLoad) {
       .couponleo-store-deals-hero__actions .couponleo-button {
         width: 100%;
       }
+
+      .couponleo-store-seo-card {
+        grid-template-columns: 1fr;
+      }
+
+      .couponleo-store-faq-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .couponleo-store-seo-card__eyebrow,
+      .couponleo-store-seo-card__fact-label {
+        white-space: normal;
+      }
     }
   `],
 })
@@ -406,6 +740,9 @@ export default class StoreDealsPage {
   private readonly route = inject(ActivatedRoute);
   private readonly response = injectResponse();
   private readonly savedService = inject(CouponleoSavedService);
+  private readonly seoSync = inject(CouponleoSeoSyncService);
+  private readonly meta = inject(Meta);
+  private readonly title = inject(Title);
   private readonly initialLoad = this.route.snapshot.data['load'] as Awaited<ReturnType<typeof load>> | undefined;
   private readonly initialCountry = normalizeCountryRouteValue(this.route.snapshot.queryParamMap.get('country'));
 
@@ -425,6 +762,7 @@ export default class StoreDealsPage {
   protected readonly storeSlug = toSignal(this.storeSlug$, { initialValue: '' });
   protected readonly selectedCountry = toSignal(this.countryQueryParamMap, { initialValue: this.initialCountry });
   protected readonly countryRouteQuery = computed(() => buildCountryRouteQuery(this.selectedCountry()));
+  protected readonly localizeRoute = (path: string) => localizeCouponleoRoute(path, this.i18n.locale());
 
   private readonly storeState = toSignal(
     withHydratedRequestState(
@@ -475,16 +813,21 @@ export default class StoreDealsPage {
   protected readonly dealTotal = computed(() => this.couponsResponse().total);
   protected readonly dealPageNumber = computed(() => this.couponsResponse().page ?? this.dealPage());
   protected readonly dealPageCount = computed(() => this.couponsResponse().pageCount ?? 1);
-  protected readonly storeRoute = computed(() => buildStoreRoute(this.store()?.slug ?? this.storeSlug()));
+  protected readonly storeRoute = computed(() => this.localizeRoute(buildStoreRoute(this.store()?.slug ?? this.storeSlug())));
   protected readonly storeLogoUrl = computed(() => {
     const store = this.store();
     return store ? couponleoStoreLogoUrl(store) : '';
   });
+  protected readonly breadcrumbs = computed<CouponleoBreadcrumbItem[]>(() => [
+    { label: 'CouponLeo', href: this.localizeRoute('/') },
+    { label: this.i18n.phrase('Stores'), href: this.localizeRoute('/stores'), queryParams: this.countryRouteQuery() },
+    { label: this.storeName() },
+  ]);
   protected readonly labels = computed(() => ({
     backToStores: this.i18n.phrase('Back to Stores'),
     searchStoreDeals: this.i18n.phrase('Search store deals'),
     storeNotFound: this.i18n.phrase('Store not found'),
-    storeNotFoundCopy: this.i18n.phrase('This store route does not match the current local CouponLeo store directory.'),
+    storeNotFoundCopy: this.i18n.phrase('This store could not be found in the current CouponLeo catalog.'),
     saveStoreDeal: this.i18n.phrase('Save store deal'),
     liveDeals: this.i18n.phrase('Live Deals'),
     location: this.i18n.phrase('Location'),
@@ -500,12 +843,27 @@ export default class StoreDealsPage {
     categoryUnavailable: this.i18n.phrase('Category unavailable'),
     directoryStore: this.i18n.phrase('Directory store'),
     featuredStore: this.i18n.phrase('Featured store'),
+    storeOverview: this.i18n.phrase('Store overview'),
+    officialWebsite: this.i18n.phrase('Official website'),
+    primaryMarket: this.i18n.phrase('Primary market'),
+    merchantType: this.i18n.phrase('Merchant type'),
+    liveDealCoverage: this.i18n.phrase('Live deal coverage'),
+    searchThemes: this.i18n.phrase('Popular search themes'),
+    visitWebsite: this.i18n.phrase('Visit official website'),
   }));
 
   protected readonly storeName = computed(() => this.store()?.name ?? this.i18n.phrase('Store Deals'));
-  protected readonly storeLocation = computed(() => this.store()?.location ?? this.i18n.phrase('Store Deals'));
+  protected readonly storeLocation = computed(() => (
+    this.selectedCountry() === 'all'
+      ? (this.store()?.location ?? this.i18n.phrase('Store Deals'))
+      : this.selectedCountry()
+  ));
   protected readonly storeHeadline = computed(() => (
-    this.store()?.headline ?? this.i18n.phrase('Browse the live CouponLeo deals for this store from the local API.')
+    this.store()?.headline ?? this.i18n.phrase('Browse the live CouponLeo deals for this store in one place.')
+  ));
+  protected readonly storeDescription = computed(() => (
+    buildCouponleoStoreCardDescriptionForMarket(this.store(), this.selectedCountry())
+    || resolveCouponleoStoreDescription(this.store(), this.storeHeadline())
   ));
   protected readonly storeCategory = computed(() => (
     this.store()?.category ? `${this.labels().category}: ${this.store()!.category}` : this.labels().categoryUnavailable
@@ -516,17 +874,68 @@ export default class StoreDealsPage {
   protected readonly storeActiveDealLabel = computed(() => (
     formatCount(this.store()?.activeCoupons ?? this.dealTotal(), 'live deal', 'live deals')
   ));
+  protected readonly storeWebsiteHost = computed(() => (
+    extractCouponleoWebsiteHost(
+      this.store()?.url,
+      this.store()?.websiteHost ?? this.store()?.name ?? this.storeName(),
+    )
+  ));
+  protected readonly storeWebsiteUrl = computed(() => this.store()?.url ?? '');
+  protected readonly storeOverviewHeading = computed(() => this.i18n.t('seo.storeOverviewHeading', { store: this.storeName() }));
+  protected readonly storeMetaDescription = computed(() => (
+    buildCouponleoStoreMetaDescription(this.store(), this.selectedCountry())
+  ));
+  protected readonly storeMetaKeywords = computed(() => (
+    buildCouponleoStoreKeywordHighlightsForMarket(this.store(), this.selectedCountry()).join(', ')
+  ));
+  protected readonly storeSeoParagraphs = computed(() => (
+    buildCouponleoStoreSeoParagraphs(this.store(), this.selectedCountry())
+  ));
+  protected readonly storeKeywordHighlights = computed(() => (
+    buildCouponleoStoreKeywordHighlightsForMarket(this.store(), this.selectedCountry())
+  ));
+  protected readonly storeFaqHeading = computed(() => this.i18n.phrase('Questions shoppers usually ask before visiting this store'));
+  protected readonly storeFaqIntro = computed(() => (
+    this.selectedCountry() === 'all'
+      ? this.i18n.phrase('These answers give a quicker read on whether this merchant is worth your next click.')
+      : `${this.i18n.phrase('These answers help')} ${this.selectedCountry()} ${this.i18n.phrase('shoppers judge whether this merchant deserves a closer checkout look.')}`
+  ));
+  protected readonly storeSeoFacts = computed<StoreSeoFact[]>(() => [
+    {
+      label: this.labels().officialWebsite,
+      value: this.storeWebsiteHost(),
+      copy: this.i18n.phrase('Open the brand directly once the offer mix here looks worth a closer checkout review.'),
+    },
+    {
+      label: this.labels().primaryMarket,
+      value: this.selectedCountry() === 'all' ? (this.store()?.location ?? 'Global') : this.selectedCountry(),
+      copy: this.selectedCountry() === 'all'
+        ? this.i18n.phrase('Useful when delivery rules, pricing, or coupon availability can shift by region.')
+        : this.i18n.phrase('This page is currently narrowed to the live deal mix visible in the selected market.'),
+    },
+    {
+      label: this.labels().merchantType,
+      value: this.store()?.category ?? this.labels().categoryUnavailable,
+      copy: this.i18n.phrase('A quick cue for the shopping intent this merchant usually fits best.'),
+    },
+    {
+      label: this.labels().liveDealCoverage,
+      value: this.storeActiveDealLabel(),
+      copy: this.i18n.phrase('A fast way to judge whether this page gives you enough active options before you move on.'),
+    },
+  ]);
+  protected readonly storeFaqs = computed(() => buildCouponleoStoreFaqItems(this.store(), this.selectedCountry()));
   protected readonly searchPlaceholder = computed(() => `${this.labels().searchStoreDeals}: ${this.storeName()}`);
   protected readonly dealsHeading = computed(() => `${this.labels().dealsFrom} ${this.storeName()}`);
   protected readonly dealsSummary = computed(() => (
     this.selectedCountry() === 'all'
-      ? `${formatCount(this.dealTotal(), 'active deal', 'active deals')} ${this.labels().availableForStore}`
-      : `${formatCount(this.dealTotal(), 'active deal', 'active deals')} ${this.labels().availableForStoreIn} ${this.selectedCountry()}.`
+      ? `${formatCount(this.dealTotal(), 'current offer', 'current offers')} gathered here for a quicker side-by-side read.`
+      : `${formatCount(this.dealTotal(), 'current offer', 'current offers')} gathered here for shoppers in ${this.selectedCountry()}.`
   ));
 
   protected readonly heroStats = computed(() => [
     { label: this.labels().liveDeals, value: this.storeActiveDealLabel(), icon: tagIconSvg },
-    { label: this.labels().location, value: this.store()?.location ?? 'N/A', icon: buildingStoreIconSvg },
+    { label: this.labels().location, value: this.storeLocation(), icon: buildingStoreIconSvg },
     { label: this.labels().category, value: this.store()?.category ?? 'N/A', icon: shieldIconSvg },
     { label: this.labels().status, value: this.store()?.featured ? this.labels().featured : this.labels().live, icon: shieldIconSvg },
   ]);
@@ -559,6 +968,29 @@ export default class StoreDealsPage {
       if (!this.storeState().loading && !this.store() && this.response) {
         this.response.statusCode = 404;
       }
+    });
+
+    effect(() => {
+      const store = this.store();
+
+      if (!store) {
+        return;
+      }
+
+      const pageTitle = this.selectedCountry() === 'all'
+        ? this.i18n.t('seo.storeTitle', { store: store.name })
+        : this.i18n.t('seo.storeTitleInMarket', { store: store.name, country: this.selectedCountry() });
+      const description = this.storeMetaDescription() || this.storeSeoParagraphs()[0] || this.storeDescription();
+
+      this.title.setTitle(pageTitle);
+      this.meta.updateTag({ name: 'description', content: description }, 'name="description"');
+      this.meta.updateTag({ name: 'keywords', content: this.storeMetaKeywords() }, 'name="keywords"');
+      this.meta.updateTag({ property: 'og:title', content: pageTitle }, 'property="og:title"');
+      this.meta.updateTag({ property: 'og:description', content: description }, 'property="og:description"');
+      this.meta.updateTag({ name: 'twitter:title', content: pageTitle }, 'name="twitter:title"');
+      this.meta.updateTag({ name: 'twitter:description', content: description }, 'name="twitter:description"');
+      this.seoSync.setPageFaqs(this.storeFaqs());
+      this.seoSync.refreshDocumentMetadata();
     });
   }
 
