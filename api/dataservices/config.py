@@ -83,6 +83,27 @@ class Config:
     MYSQL_CONNECT_TIMEOUT = int(_env_first("COUPONLEO_DB_CONNECT_TIMEOUT", "MYSQL_CONNECT_TIMEOUT", default="5"))
     MYSQL_READ_TIMEOUT = int(_env_first("COUPONLEO_DB_READ_TIMEOUT", "MYSQL_READ_TIMEOUT", default="60"))
     MYSQL_WRITE_TIMEOUT = int(_env_first("COUPONLEO_DB_WRITE_TIMEOUT", "MYSQL_WRITE_TIMEOUT", default="60"))
+    TELEMETRY_MYSQL_CONNECT_TIMEOUT = int(
+        _env_first(
+            "COUPONLEO_TELEMETRY_DB_CONNECT_TIMEOUT",
+            default=str(max(1, min(MYSQL_CONNECT_TIMEOUT, 3))),
+        )
+    )
+    TELEMETRY_MYSQL_READ_TIMEOUT = int(
+        _env_first(
+            "COUPONLEO_TELEMETRY_DB_READ_TIMEOUT",
+            default=str(max(1, min(MYSQL_READ_TIMEOUT, 8))),
+        )
+    )
+    TELEMETRY_MYSQL_WRITE_TIMEOUT = int(
+        _env_first(
+            "COUPONLEO_TELEMETRY_DB_WRITE_TIMEOUT",
+            default=str(max(1, min(MYSQL_WRITE_TIMEOUT, 8))),
+        )
+    )
+    TELEMETRY_MYSQL_RETRY_COOLDOWN_SECONDS = int(
+        _env_first("COUPONLEO_TELEMETRY_DB_RETRY_COOLDOWN_SECONDS", default="120")
+    )
     MYSQL_SSL_REQUIRED = _env_first(
         "COUPONLEO_DB_SSL",
         "CPLODB_SSL",

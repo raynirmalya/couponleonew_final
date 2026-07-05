@@ -112,6 +112,8 @@ class CouponleoTelemetryRepository:
         data_dir = Path(__file__).resolve().parent
         self._schema_sql = (data_dir / "telemetry_schema.sql").read_text(encoding="utf-8")
         self._fallback_file = data_dir / "telemetry_events.local.jsonl"
+        self._mysql_ready = False
+        self._mysql_retry_after: Optional[datetime] = None
 
     def _db_configured(self) -> bool:
         return all(
@@ -136,9 +138,9 @@ class CouponleoTelemetryRepository:
             "database": Config.MYSQL_DB,
             "cursorclass": DictCursor,
             "charset": "utf8mb4",
-            "connect_timeout": max(1, int(Config.MYSQL_CONNECT_TIMEOUT)),
-            "read_timeout": max(1, int(Config.MYSQL_READ_TIMEOUT)),
-            "write_timeout": max(1, int(Config.MYSQL_WRITE_TIMEOUT)),
+            "connect_timeout": max(1, int(Config.TELEMETRY_MYSQL_CONNECT_TIMEOUT)),
+            "read_timeout": max(1, int(Config.TELEMETRY_MYSQL_READ_TIMEOUT)),
+            "write_timeout": max(1, int(Config.TELEMETRY_MYSQL_WRITE_TIMEOUT)),
             "autocommit": False,
         }
 
@@ -147,15 +149,39 @@ class CouponleoTelemetryRepository:
 
         return pymysql.connect(**connection_kwargs)
 
+    def _mark_mysql_ready(self) -> None:
+        self._mysql_ready = True
+        self._mysql_retry_after = None
+
+    def _mark_mysql_failure(self) -> None:
+        self._mysql_ready = False
+        cooldown_seconds = max(5, int(Config.TELEMETRY_MYSQL_RETRY_COOLDOWN_SECONDS))
+        self._mysql_retry_after = datetime.utcnow() + timedelta(seconds=cooldown_seconds)
+
+    def _mysql_retry_blocked(self) -> bool:
+        return bool(self._mysql_retry_after and self._mysql_retry_after > datetime.utcnow())
+
     def ensure_table(self) -> bool:
         if not self._db_configured():
             return False
 
-        connection = self._connect_mysql()
+        if self._mysql_ready:
+            return True
+
+        if self._mysql_retry_blocked():
+            return False
+
+        try:
+            connection = self._connect_mysql()
+        except Exception:
+            self._mark_mysql_failure()
+            return False
+
         try:
             with connection.cursor() as cursor:
                 cursor.execute(self._schema_sql)
             connection.commit()
+            self._mark_mysql_ready()
         finally:
             connection.close()
 
@@ -527,7 +553,12 @@ class CouponleoTelemetryRepository:
 
         try:
             if self.ensure_table():
-                connection = self._connect_mysql()
+                try:
+                    connection = self._connect_mysql()
+                except Exception:
+                    self._mark_mysql_failure()
+                    raise
+
                 try:
                     with connection.cursor() as cursor:
                         cursor.executemany(
@@ -614,6 +645,7 @@ class CouponleoTelemetryRepository:
                         )
                         stored_count = int(cursor.rowcount or 0)
                     connection.commit()
+                    self._mark_mysql_ready()
                     return stored_count
                 finally:
                     connection.close()
