@@ -1525,7 +1525,9 @@ class CouponLeoRepository:
         if cached is not None:
             return cached
 
-        if active is None or active:
+        prefer_live_store_query = self._db_configured() and bool(_clean_text(store))
+
+        if not prefer_live_store_query and (active is None or active):
             try:
                 cached_items = self._cached_live_coupon_results(
                     query=query,
