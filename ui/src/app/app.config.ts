@@ -1,3 +1,4 @@
+import { couponleoRequestContextInterceptor } from './services/couponleo-request-context.interceptor';
 import { isPlatformServer } from '@angular/common';
 import {
   provideHttpClient,
@@ -11,7 +12,7 @@ import {
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import { provideClientHydration, withEventReplay } from '@angular/platform-browser';
-import { provideFileRouter, requestContextInterceptor, withExtraRoutes } from '@analogjs/router';
+import { provideFileRouter, withExtraRoutes } from '@analogjs/router';
 import { injectRequest } from '@analogjs/router/tokens';
 import { type Routes } from '@angular/router';
 import { COUPONLEO_API_BASE_URL } from './services/couponleo-api.service';
@@ -84,7 +85,7 @@ export const appConfig: ApplicationConfig = {
     ),
     provideHttpClient(
       withFetch(),
-      withInterceptors([requestContextInterceptor])
+      withInterceptors([couponleoRequestContextInterceptor])
     ),
     provideClientHydration(withEventReplay()),
     { provide: COUPONLEO_API_BASE_URL, useFactory: couponleoApiBaseUrlFactory },

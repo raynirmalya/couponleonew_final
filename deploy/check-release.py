@@ -22,6 +22,7 @@ checks = [
     ("/couponleo-release-missing-route", 404, None),
     ("/stores/couponleo-release-missing-store", 404, None),
     ("/categories/couponleo-release-missing-category", 404, None),
+    ("/stores/lenovo-com?country=India", 200, "in India"),
     ("/sign-in", 200, "G-HM2CS6185Y"),
     ("/robots.txt", 200, "Sitemap:"),
     ("/sitemap.xml", 200, "sitemapindex"),
@@ -31,11 +32,13 @@ failures = []
 for path, expected, marker in checks:
     start = time.monotonic()
     try:
-        response = client.open(base + path, timeout=40)
+        response = client.open(urllib.request.Request(base + path, headers=({'Host': sys.argv[2], 'X-Forwarded-Proto': 'https'} if len(sys.argv) > 2 else {})), timeout=40)
     except urllib.error.HTTPError as error:
         response = error
     body = response.read().decode("utf-8", errors="replace")
     passed = response.status == expected and (marker is None or marker in body)
+    if marker == 'class="couponleo-deal-card"':
+        passed = passed and body.count(marker) <= 12
     print(json.dumps({"route": path, "status": response.status, "seconds": round(time.monotonic()-start, 3), "bytes": len(body.encode()), "passed": passed}), flush=True)
     if not passed:
         failures.append(path)
