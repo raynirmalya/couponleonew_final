@@ -14,6 +14,7 @@ export interface CouponleoCouponReveal {
   description: string;
   code: string;
   route: string;
+  ctaUrl?: string;
 }
 
 @Component({
@@ -41,19 +42,24 @@ export interface CouponleoCouponReveal {
             <span class="couponleo-coupon-dialog__eyebrow-icon" aria-hidden="true">
               <app-couponleo-eon-icon [svg]="ticketIconSvg"></app-couponleo-eon-icon>
             </span>
-            Coupon ready to copy
+            {{ item.code ? 'Coupon ready to copy' : 'Offer details' }}
           </div>
 
           <h3 id="couponleo-coupon-dialog-title">{{ item.title }}</h3>
           <p class="couponleo-coupon-dialog__subtitle">{{ item.subtitle }}</p>
           <p class="couponleo-coupon-dialog__description">{{ item.description }}</p>
 
+          @if (item.code) {
           <div class="couponleo-coupon-dialog__ticket">
             <span>Use this code at checkout</span>
             <strong>{{ item.code }}</strong>
           </div>
 
+          } @else {
+            <p>No coupon code is supplied. Check the offer and final price on the merchant website.</p>
+          }
           <div class="couponleo-coupon-dialog__actions">
+            @if (item.code) {
             <button
               type="button"
               class="couponleo-button couponleo-button--solid couponleo-coupon-dialog__copy"
@@ -65,6 +71,10 @@ export interface CouponleoCouponReveal {
               {{ copied() ? 'Copied' : 'Copy Code' }}
             </button>
 
+            }
+            @if (merchantUrl(item.ctaUrl); as url) {
+              <a class="couponleo-button couponleo-button--ghost" [href]="url" target="_blank" rel="noopener noreferrer sponsored">Visit merchant</a>
+            } @else {
             <a
               class="couponleo-button couponleo-button--ghost"
               [routerLink]="item.route"
@@ -72,6 +82,7 @@ export interface CouponleoCouponReveal {
             >
               Open deal page
             </a>
+            }
           </div>
         </section>
       </div>
@@ -240,6 +251,11 @@ export class CouponleoCouponDialogComponent {
   protected readonly copyIconSvg = copyIconSvg;
   protected readonly ticketIconSvg = ticketIconSvg;
   protected readonly copied = signal(false);
+
+  protected merchantUrl(value?: string): string | null {
+    try { const url = new URL(value || ''); return ['http:', 'https:'].includes(url.protocol) ? url.href : null; }
+    catch { return null; }
+  }
 
   @HostListener('document:keydown.escape')
   protected handleEscape(): void {

@@ -23,17 +23,8 @@ const COUNTRY_FILTERED_DIRECTORY_ROUTES = [
   { pathname: '/stores', changefreq: 'daily', priority: '0.87' },
   { pathname: '/top-deals', changefreq: 'daily', priority: '0.89' },
 ];
-const NON_DEFAULT_LOCALES = [
-  { locale: 'de-DE', segment: 'de' },
-  { locale: 'fr-FR', segment: 'fr' },
-  { locale: 'es-ES', segment: 'es' },
-  { locale: 'it-IT', segment: 'it' },
-  { locale: 'pt-BR', segment: 'pt' },
-  { locale: 'nl-NL', segment: 'nl' },
-  { locale: 'hi-IN', segment: 'hi' },
-  { locale: 'ja-JP', segment: 'ja' },
-  { locale: 'ar-SA', segment: 'ar' },
-];
+// Locale navigation is available; publish translated URLs after main-body translation review.
+const NON_DEFAULT_LOCALES = [];
 const EXCLUDED_CATEGORY_SLUGS = new Set([
   'coupons',
   'deals',

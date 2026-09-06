@@ -615,48 +615,14 @@ export function buildCouponleoStoreSeoParagraphs(
   store: CouponleoStore | null | undefined,
   selectedCountry: string,
 ): string[] {
-  if (!store) {
-    return [];
-  }
-
-  const host = store.websiteHost || extractCouponleoWebsiteHost(store.url, store.name);
-  const narrative = resolveCouponleoStoreDescription(store);
-  const storedParagraphs = editorialCandidates(store.seoParagraphs ?? [], 10, 72);
-  const activeOfferCount = storeOfferCount(store);
-  const coverageParagraph = storeCoverageSentence(store, host);
-  const shopperParagraph = storeMarketSentence(store, selectedCountry, host);
-  const offerStrategyParagraph = storeCategorySentence(store, host);
-  const exampleSentence = exampleOfferSentence(store);
-  const closingParagraph = exampleSentence
-    ? `${exampleSentence} Read it as proof of the merchant's current style of discounting, not just as a random coupon sample.`
-    : activeOfferCount > 0
-      ? stableVariant(storeContextSeed(store, 'closing-live'), [
-          `If the mix still feels thin after a quick scan, keep comparing. The better next click is usually the one backed by more than one attractive offer.`,
-          `If the strongest deal still looks too narrow, let that be the signal to compare another merchant before checkout.`,
-          `If the page feels lighter than the headline suggests, it is smarter to keep the shortlist open a little longer.`,
-        ])
-      : stableVariant(storeContextSeed(store, 'closing-quiet'), [
-          `When the deal board is quiet, keep the merchant on the list but wait for a stronger cycle before treating it as the best next click.`,
-          `A quiet page still has value, but it usually means the better move is to compare another store first and come back later.`,
-          `If the live mix is flat today, treat this as context rather than a final answer and keep scanning the field.`,
-        ]);
-
-  if (storedParagraphs.length > 0) {
-    return uniqueText([
-      narrative,
-      ...storedParagraphs,
-      coverageParagraph,
-      shopperParagraph,
-    ]).slice(0, 5);
-  }
-
-  return uniqueText([
-    narrative || storeOpeningSentence(store, selectedCountry, host),
-    offerStrategyParagraph,
-    shopperParagraph,
-    coverageParagraph,
-    closingParagraph,
-  ]).slice(0, 5);
+  if (!store) return [];
+  return [
+    `Compare ${store.name} coupon codes and sale offers using the details on each card. An offer can apply only to selected products, customers or order values.`,
+    selectedCountry === 'all'
+      ? 'Choose your market before using a code. Shipping, currency and promotion eligibility can differ between countries.'
+      : `These results are filtered for ${selectedCountry}. Confirm delivery and promotion eligibility on the merchant website.`,
+    'An expiry date or an active feed entry does not confirm that a code will work at checkout. Offers without an expiry date need confirmation from the merchant.',
+  ];
 }
 
 export function buildCouponleoStoreKeywordHighlights(store: CouponleoStore | null | undefined): string[] {
@@ -883,37 +849,11 @@ export function buildCouponleoStoreFaqItems(
   store: CouponleoStore | null | undefined,
   selectedCountry: string,
 ): CouponleoSeoFaqItem[] {
-  if (!store) {
-    return [];
-  }
-
-  const host = store.websiteHost || extractCouponleoWebsiteHost(store.url, store.name);
-  const activeOfferCount = store.activeCoupons || store.couponCount || 0;
-  const marketLabel = selectedCountry === 'all'
-    ? marketCopy(store.location)
-    : `in ${selectedCountry}`;
-  const narrative = trimSentenceEnding(storePrimaryNarrative(store));
-  const focusSentence = narrative
-    ? `${narrative}.`
-    : `${store.name} is easier to judge once you can see today's ${storeSavingsFocus(store)} in one place.`;
-
+  if (!store) return [];
   return [
-    {
-      question: `What can shoppers usually expect from ${store.name}?`,
-      answer: `${focusSentence} It gives you a better read on whether the current savings picture is built around broad markdowns, sharper coupon codes, or just a few headline offers.`,
-    },
-    {
-      question: selectedCountry === 'all'
-        ? `Is ${store.name} worth checking before checkout?`
-        : `Is ${store.name} worth checking for shoppers in ${selectedCountry}?`,
-      answer: activeOfferCount > 0
-        ? `${countLabel(activeOfferCount, 'live offer', 'live offers')} are visible ${marketLabel}, which is usually enough depth to judge whether ${host} still feels competitive once timing, exclusions, and regional price differences are factored in.`
-        : `${host} can still be worth checking ${marketLabel}, but it becomes much more persuasive once fresh offers return and you have more than one savings angle to compare.`,
-    },
-    {
-      question: `How should you use this ${store.name} page before buying?`,
-      answer: `Start by scanning the strongest live codes, sale pricing, and offer examples. If one promotion stands out, open ${host} only after you know whether the merchant is rewarding quick checkout, category-specific baskets, or a broader storewide spend.`,
-    },
+    { question: `How do I use a ${store.name} coupon?`, answer: 'Open the offer, copy the code if one is supplied, and apply it in the merchant checkout. Check that the total changes before paying.' },
+    { question: 'Are all listed offers checkout-tested?', answer: 'No. CouponLeo lists merchant and partner feed offers. Check the expiry, eligible products, minimum spend and customer restrictions with the merchant.' },
+    { question: 'What if a coupon does not work?', answer: 'Check the spelling, expiry, market, product exclusions and minimum spend. If the merchant rejects it, try another offer; do not rely on the listed discount until checkout confirms it.' },
   ];
 }
 

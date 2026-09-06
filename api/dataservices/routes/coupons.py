@@ -3,6 +3,7 @@ from __future__ import annotations
 from flask import Blueprint, abort, jsonify, request
 
 from data.repository import repository
+from offer_quality import prepare_offers
 from routes.listing_utils import list_response, parse_bool_arg, parse_limit_arg, parse_page_arg
 
 coupons_bp = Blueprint("coupons", __name__)
@@ -34,6 +35,7 @@ def _coupon_response(
         page=page,
         limit=limit,
     )
+    items = prepare_offers(items)
     page_count = max(1, (total + limit - 1) // limit)
     return list_response(
         items,

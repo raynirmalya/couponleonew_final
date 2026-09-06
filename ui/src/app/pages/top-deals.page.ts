@@ -119,7 +119,7 @@ interface TopDealsEditorialCopy {
 }
 
 const heroBenefits = [
-  { title: 'Verified', copy: 'Active offers only', icon: shieldIconSvg },
+  { title: 'Merchant offers', copy: 'Check eligibility and expiry', icon: shieldIconSvg },
   { title: 'Top Savings', copy: 'Sorted by live score', icon: discountIconSvg },
   { title: 'Daily Updates', copy: 'Search and filter ready', icon: clockIconSvg },
   { title: 'Secure', copy: 'Safer paths to checkout', icon: shieldLockIconSvg },
@@ -1066,7 +1066,7 @@ export default class TopDealsPage {
     searchPlaceholder: this.i18n.phrase('Search deals, stores or categories'),
     topPicks: this.i18n.phrase('Top Picks'),
     viewFeaturedCoupons: this.i18n.phrase('View featured coupons'),
-    verified: this.i18n.phrase('Verified'),
+    verified: this.i18n.phrase('Merchant offer'),
     claimDeal: this.i18n.phrase('Claim Deal'),
     browseLiveDeals: this.i18n.phrase('Browse Live Deals'),
     activeDeals: this.i18n.phrase('active deals'),
