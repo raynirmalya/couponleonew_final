@@ -1,6 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { inject, Injectable, InjectionToken } from '@angular/core';
-import { EMPTY, Observable, catchError, expand, reduce, shareReplay, throwError } from 'rxjs';
+import { isPlatformServer } from '@angular/common';
+import { inject, Injectable, InjectionToken, PLATFORM_ID } from '@angular/core';
+import { EMPTY, Observable, catchError, expand, reduce, shareReplay, throwError, timeout } from 'rxjs';
 
 export interface CouponleoListResponse<T> {
   items: T[];
@@ -62,6 +63,7 @@ export interface CouponleoStore {
   headline: string;
   description?: string;
   metaDescription?: string;
+  category_hint?: string;
   websiteDescription?: string;
   websiteMetaDescription?: string;
   seoParagraphs?: string[];
@@ -213,6 +215,7 @@ export interface CouponleoTelemetryIngestResult {
 }
 
 export interface CouponleoCategoryListParams {
+  location?: string;
   q?: string;
   page?: number;
   pageSize?: number;
@@ -268,21 +271,39 @@ export interface CouponleoTelemetryEventListParams {
 
 export const COUPONLEO_API_BASE_URL = new InjectionToken<string>('COUPONLEO_API_BASE_URL');
 
+function couponleoServerReadTimeoutMs(): number {
+  const rawValue = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env?.['COUPONLEO_SERVER_FETCH_TIMEOUT_MS'];
+  const parsedValue = Number(rawValue);
+  return Number.isFinite(parsedValue) && parsedValue >= 3_000
+    ? parsedValue
+    : 15_000;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CouponleoApiService {
   private readonly http = inject(HttpClient);
+  private readonly platformId = inject(PLATFORM_ID);
   private readonly baseUrl = inject(COUPONLEO_API_BASE_URL, { optional: true }) ?? '/couponleo/api';
   private readonly responseCache = new Map<string, { expiresAt: number; response$: Observable<unknown> }>();
-  private readonly publicReadCacheTtlMs = 120_000;
+  private readonly publicReadCacheTtlMs = 600_000;
+  private readonly detailReadCacheTtlMs = 1_800_000;
+  private readonly marketReadCacheTtlMs = 900_000;
 
   listCategories(params: CouponleoCategoryListParams = {}): Observable<CouponleoListResponse<CouponleoCategory>> {
     const httpParams = this.buildParams(params);
-    return this.cachedGet<CouponleoListResponse<CouponleoCategory>>(`${this.baseUrl}/categories`, httpParams);
+    return this.cachedGet<CouponleoListResponse<CouponleoCategory>>(
+      `${this.baseUrl}/categories`,
+      httpParams,
+      params.q ? this.publicReadCacheTtlMs : this.marketReadCacheTtlMs,
+    );
   }
 
   getCategory(identifier: string): Observable<CouponleoDataResponse<CouponleoCategory>> {
     return this.cachedGet<CouponleoDataResponse<CouponleoCategory>>(
       `${this.baseUrl}/categories/${encodeURIComponent(identifier)}`,
+      undefined,
+      this.detailReadCacheTtlMs,
     );
   }
 
@@ -306,6 +327,7 @@ export class CouponleoApiService {
     return this.cachedGet<CouponleoListResponse<CouponleoCoupon>>(
       `${this.baseUrl}/coupons/store/${encodeURIComponent(storeSlug)}`,
       httpParams,
+      params.q ? this.publicReadCacheTtlMs : this.marketReadCacheTtlMs,
     );
   }
 
@@ -321,7 +343,11 @@ export class CouponleoApiService {
 
   listStores(params: CouponleoStoreListParams = {}): Observable<CouponleoListResponse<CouponleoStore>> {
     const httpParams = this.buildParams(params);
-    return this.cachedGet<CouponleoListResponse<CouponleoStore>>(`${this.baseUrl}/stores`, httpParams);
+    return this.cachedGet<CouponleoListResponse<CouponleoStore>>(
+      `${this.baseUrl}/stores`,
+      httpParams,
+      params.q ? this.publicReadCacheTtlMs : this.marketReadCacheTtlMs,
+    );
   }
 
   listAllStores(
@@ -371,16 +397,26 @@ export class CouponleoApiService {
   getStore(identifier: string): Observable<CouponleoDataResponse<CouponleoStore>> {
     return this.cachedGet<CouponleoDataResponse<CouponleoStore>>(
       `${this.baseUrl}/stores/${encodeURIComponent(identifier)}`,
+      undefined,
+      this.detailReadCacheTtlMs,
     );
   }
 
   listLocations(params: CouponleoLocationListParams = {}): Observable<CouponleoListResponse<CouponleoLocation>> {
     const httpParams = this.buildParams(params);
-    return this.cachedGet<CouponleoListResponse<CouponleoLocation>>(`${this.baseUrl}/locations`, httpParams);
+    return this.cachedGet<CouponleoListResponse<CouponleoLocation>>(
+      `${this.baseUrl}/locations`,
+      httpParams,
+      this.marketReadCacheTtlMs,
+    );
   }
 
   getStoreAnalytics(): Observable<CouponleoDataResponse<CouponleoStoreAnalytics>> {
-    return this.cachedGet<CouponleoDataResponse<CouponleoStoreAnalytics>>(`${this.baseUrl}/stores/analytics/summary`);
+    return this.cachedGet<CouponleoDataResponse<CouponleoStoreAnalytics>>(
+      `${this.baseUrl}/stores/analytics/summary`,
+      undefined,
+      this.detailReadCacheTtlMs,
+    );
   }
 
   listBlogArticles(params: CouponleoBlogArticleListParams = {}): Observable<CouponleoListResponse<CouponleoBlogArticle>> {
@@ -431,6 +467,11 @@ export class CouponleoApiService {
     }
 
     const request$ = this.http.get<T>(url, params ? { params } : {}).pipe(
+      timeout({
+        first: isPlatformServer(this.platformId)
+          ? couponleoServerReadTimeoutMs()
+          : 30_000,
+      }),
       catchError((error) => {
         this.responseCache.delete(cacheKey);
         return throwError(() => error);

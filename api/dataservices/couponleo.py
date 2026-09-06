@@ -136,6 +136,30 @@ def _client_key() -> str:
     return f"{ip}:{request.method}:{request.path}"
 
 
+def _read_cache_control(path: str) -> str:
+    normalized_path = (path or "").rstrip("/")
+    collection_paths = {
+        f"{Config.API_PREFIX}/categories",
+        f"{Config.API_PREFIX}/coupons",
+        f"{Config.API_PREFIX}/coupons/featured",
+        f"{Config.API_PREFIX}/locations",
+        f"{Config.API_PREFIX}/stores",
+    }
+    detail_prefixes = (
+        f"{Config.API_PREFIX}/categories/",
+        f"{Config.API_PREFIX}/coupons/store/",
+        f"{Config.API_PREFIX}/stores/",
+    )
+
+    if normalized_path in collection_paths:
+        return "public, max-age=600, stale-while-revalidate=3600"
+
+    if any(normalized_path.startswith(prefix) for prefix in detail_prefixes):
+        return "public, max-age=1200, stale-while-revalidate=7200"
+
+    return "public, max-age=300, stale-while-revalidate=1800"
+
+
 @couponleoapi.before_request
 def enforce_request_policy():
     path = request.path or "/"
@@ -211,7 +235,7 @@ def after_request_func(response):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
     elif request.method in {"GET", "HEAD"} and not response.headers.get("Cache-Control"):
-        response.headers["Cache-Control"] = "public, max-age=120, stale-while-revalidate=600"
+        response.headers["Cache-Control"] = _read_cache_control(request.path)
     elif request.method not in {"GET", "HEAD"}:
         response.headers["Cache-Control"] = "no-store"
     for header, value in Config.SECURITY_HEADERS.items():
@@ -284,6 +308,7 @@ from routes.locations import locations_bp
 from routes.newsletter import newsletter_bp
 from routes.stores import stores_bp
 from routes.telemetry import telemetry_bp
+from data.repository import repository
 from data.telemetry_repository import telemetry_repository
 
 couponleoapi.register_blueprint(articles_bp, url_prefix=f"{Config.API_PREFIX}/articles")
@@ -302,11 +327,22 @@ def _warm_optional_storage() -> None:
     except Exception as error:  # pragma: no cover - defensive startup logging only
         couponleoapi.logger.warning("Auth storage warmup skipped: %s", error)
 
+    try:
+        repository.ensure_store_schema()
+    except Exception as error:  # pragma: no cover - defensive startup logging only
+        couponleoapi.logger.warning("Store schema warmup skipped: %s", error)
+
     if Config.ENABLE_TELEMETRY:
         try:
             telemetry_repository.ensure_table()
         except Exception as error:  # pragma: no cover - defensive startup logging only
             couponleoapi.logger.warning("Telemetry storage warmup skipped: %s", error)
+
+    if _env_flag("COUPONLEO_WARM_SNAPSHOT", False):
+        try:
+            repository._refresh_data_async_if_needed()
+        except Exception as error:  # pragma: no cover - defensive startup logging only
+            couponleoapi.logger.warning("Coupon catalog warmup skipped: %s", error)
 
 
 _warm_optional_storage()

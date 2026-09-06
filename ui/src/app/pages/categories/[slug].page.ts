@@ -1,4 +1,5 @@
-import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { isPlatformServer } from '@angular/common';
+import { Component, computed, effect, inject, PLATFORM_ID, signal, untracked } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { type PageServerLoad } from '@analogjs/router';
@@ -154,14 +155,7 @@ export async function load(pageServerLoad: PageServerLoad) {
 
   return {
     category,
-    coupons: slug
-      ? await fetchCouponleoList(
-        pageServerLoad,
-        '/coupons',
-        { active: true, category: slug, location, page: 1, pageSize: categoryDealsPageSize },
-        emptyCouponListResponse<CouponleoCoupon>(),
-      )
-      : emptyCouponListResponse<CouponleoCoupon>(),
+    coupons: undefined as CouponleoListResponse<CouponleoCoupon> | undefined,
     locations: await fetchCouponleoList(
       pageServerLoad,
       '/locations',
@@ -481,7 +475,7 @@ export async function load(pageServerLoad: PageServerLoad) {
             [itemLabel]="i18n.phrase('category deals')"
             (pageChange)="setDealPage($event)"
           ></app-couponleo-pagination>
-        } @else {
+        } @else if (!dealsLoading() && !deferCouponsOnServer) {
           <div class="couponleo-empty-card">
             <h3>{{ i18n.phrase('No deals match these filters') }}</h3>
             <p>{{ labels().noDealsCopy }}</p>
@@ -929,6 +923,7 @@ export async function load(pageServerLoad: PageServerLoad) {
   `],
 })
 export default class CategoryDealsPage {
+  private readonly platformId = inject(PLATFORM_ID);
   private readonly api = inject(CouponleoApiService);
   protected readonly i18n = inject(CouponleoI18nService);
   private readonly route = inject(ActivatedRoute);
@@ -940,6 +935,7 @@ export default class CategoryDealsPage {
   private readonly title = inject(Title);
   private readonly initialLoad = this.route.snapshot.data['load'] as Awaited<ReturnType<typeof load>> | undefined;
   private readonly initialCountry = normalizeCountryRouteValue(this.route.snapshot.queryParamMap.get('country'));
+  protected readonly deferCouponsOnServer = isPlatformServer(this.platformId) && this.initialLoad?.coupons === undefined;
 
   private readonly categorySlug$ = this.route.paramMap.pipe(
     map((params) => params.get('slug') ?? ''),
@@ -997,13 +993,15 @@ export default class CategoryDealsPage {
       ]),
       ([slug, query, country, page]) => (
         slug
-          ? this.api.listCouponsByCategory(slug, {
-            active: true,
-            location: country === 'all' ? undefined : country,
-            page,
-            pageSize: categoryDealsPageSize,
-            q: query.trim() || undefined,
-          })
+          ? (this.deferCouponsOnServer
+            ? of(emptyCouponListResponse<CouponleoCoupon>())
+            : this.api.listCouponsByCategory(slug, {
+              active: true,
+              location: country === 'all' ? undefined : country,
+              page,
+              pageSize: categoryDealsPageSize,
+              q: query.trim() || undefined,
+            }))
           : of(emptyCouponListResponse<CouponleoCoupon>())
       ),
       emptyCouponListResponse<CouponleoCoupon>(),
@@ -1033,20 +1031,20 @@ export default class CategoryDealsPage {
     { initialValue: createLoadingState(emptyListResponse<CouponleoStore>()) },
   );
 
-  protected readonly isLoading = computed(() => (
-    this.categoryState().loading
-    || this.locationsState().loading
-    || this.couponsState().loading
-    || this.storesState().loading
-  ));
+  protected readonly isLoading = computed(() => !this.category() && this.categoryState().loading);
+  protected readonly dealsLoading = computed(() => this.couponsState().loading);
   protected readonly category = computed(() => this.categoryState().data);
   private readonly locationsResponse = computed(() => this.locationsState().data);
   private readonly couponsResponse = computed(() => this.couponsState().data);
   private readonly storesResponse = computed(() => this.storesState().data);
   protected readonly countryOptions = computed(() => buildCountryOptions(this.locationsResponse().items, this.i18n.t('common.allMarkets')));
 
-  protected readonly dealTotal = computed(() => this.couponsResponse().total);
-  protected readonly storeTotal = computed(() => this.storesResponse().total);
+  protected readonly dealTotal = computed(() => (
+    this.couponsResponse().total || this.category()?.couponCount || 0
+  ));
+  protected readonly storeTotal = computed(() => (
+    this.storesResponse().total || this.category()?.storeCount || 0
+  ));
   protected readonly dealPageNumber = computed(() => this.couponsResponse().page ?? this.dealPage());
   protected readonly dealPageCount = computed(() => this.couponsResponse().pageCount ?? 1);
   protected readonly categoryRoute = computed(() => this.localizeRoute(buildCategoryRoute(this.category()?.slug ?? this.categorySlug())));
@@ -1068,7 +1066,7 @@ export default class CategoryDealsPage {
     noStores: this.i18n.phrase('No stores match this country filter'),
     noStoresCopy: this.i18n.phrase('Switch markets or keep browsing the live deals below for this category.'),
     saveCategoryDeal: this.i18n.phrase('Save category deal'),
-    categoryOverview: this.i18n.phrase('Category overview'),
+    categoryOverview: this.i18n.phrase('Category guide'),
     marketCoverage: this.i18n.phrase('Market coverage'),
     storeDepth: this.i18n.phrase('Store depth'),
     browseIntent: this.i18n.phrase('Browse intent'),
@@ -1133,11 +1131,11 @@ export default class CategoryDealsPage {
       storeCount: this.storeTotal() || this.category()?.storeCount || 0,
     })
   ));
-  protected readonly categoryFaqHeading = computed(() => this.i18n.phrase('Questions shoppers ask before comparing this category'));
+  protected readonly categoryFaqHeading = computed(() => this.i18n.phrase('What this category tells you'));
   protected readonly categoryFaqIntro = computed(() => (
     this.selectedCountry() === 'all'
-      ? this.i18n.phrase('Use these answers to decide whether to stay broad or narrow down to a merchant.')
-      : `${this.i18n.phrase('Use these answers to judge how')} ${this.categoryName()} ${this.i18n.phrase('looks for shoppers in')} ${this.selectedCountry()}.`
+      ? this.i18n.phrase('A quick guide to whether you should stay broad or move into a specific store.')
+      : `${this.i18n.phrase('A quick guide to how')} ${this.categoryName()} ${this.i18n.phrase('looks for shoppers in')} ${this.selectedCountry()}.`
   ));
   protected readonly countrySummary = computed(() => {
     const marketCount = this.selectedCountry() === 'all'
@@ -1150,19 +1148,19 @@ export default class CategoryDealsPage {
     {
       label: this.labels().liveDeals,
       value: this.categoryDealLabel(),
-      copy: this.i18n.phrase('A quick read on how active this category feels right now.'),
+      copy: this.i18n.phrase('A fast read on how active the category feels right now.'),
     },
     {
       label: this.labels().storeDepth,
       value: this.categoryStoreLabel(),
-      copy: this.i18n.phrase('A simple way to judge how much brand variety is available before you click deeper.'),
+      copy: this.i18n.phrase('Shows whether the category is being contested by a handful of brands or a wider field.'),
     },
     {
       label: this.labels().marketCoverage,
       value: this.categoryStatusLabel(),
       copy: this.selectedCountry() === 'all'
-        ? this.i18n.phrase('Browse broadly here, then narrow to a market only when region-specific differences start to matter.')
-        : `${this.i18n.phrase('Focused on')} ${this.selectedCountry()} ${this.i18n.phrase('shoppers right now.')}`,
+        ? this.i18n.phrase('Start broad here, then narrow by market once regional differences begin to matter.')
+        : `${this.i18n.phrase('Focused on')} ${this.selectedCountry()} ${this.i18n.phrase('so the comparison stays closer to that market.')}`,
     },
   ]);
   protected readonly categoryFaqs = computed(() => buildCouponleoCategoryFaqItems(this.category(), {
@@ -1197,7 +1195,7 @@ export default class CategoryDealsPage {
   ));
 
   protected readonly deals = computed<CategoryDealCard[]>(() => (
-    this.couponsResponse().items.map((coupon) => ({
+    this.couponsResponse().items.map((coupon: CouponleoCoupon) => ({
       id: `coupon-${coupon.slug}`,
       title: coupon.title,
       subtitle: coupon.categoryName,

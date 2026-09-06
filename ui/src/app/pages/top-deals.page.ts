@@ -28,8 +28,10 @@ import { createDynamicRouteMeta } from '../services/couponleo-route-meta';
 import { CouponleoI18nService } from '../services/couponleo-i18n.service';
 import { couponleoCouponLogoUrl, couponleoStoreLogoUrl } from '../services/couponleo-logo.helpers';
 import { CouponleoSavedService } from '../services/couponleo-saved.service';
+import { CouponleoSeoSyncService } from '../services/couponleo-seo-sync.service';
 import {
   buildCouponleoCategoryCardDescription,
+  type CouponleoSeoFaqItem,
   buildCouponleoStoreCardDescriptionForMarket,
 } from '../services/couponleo-seo-copy.helpers';
 import {
@@ -122,6 +124,10 @@ const heroBenefits = [
   { title: 'Daily Updates', copy: 'Search and filter ready', icon: clockIconSvg },
   { title: 'Secure', copy: 'Safer paths to checkout', icon: shieldLockIconSvg },
 ];
+const topDealsCategoryFetchLimit = 120;
+const topDealsCouponFetchLimit = 96;
+const topDealsLocationFetchLimit = 80;
+const topDealsStoreFetchLimit = 80;
 
 export const routeMeta = createDynamicRouteMeta((route) => {
   const country = normalizeCountryRouteValue(route.queryParamMap.get('country'));
@@ -153,25 +159,25 @@ export async function load(pageServerLoad: PageServerLoad) {
     categories: await fetchCouponleoList(
       pageServerLoad,
       '/categories',
-      { pageSize: 1000 },
+      { pageSize: topDealsCategoryFetchLimit },
       emptyListResponse<CouponleoCategory>(),
     ),
     coupons: await fetchCouponleoList(
       pageServerLoad,
       '/coupons',
-      { active: true, location, pageSize: 120 },
+      { active: true, location, pageSize: topDealsCouponFetchLimit },
       emptyListResponse<CouponleoCoupon>(),
     ),
     locations: await fetchCouponleoList(
       pageServerLoad,
       '/locations',
-      { pageSize: 120 },
+      { pageSize: topDealsLocationFetchLimit },
       emptyListResponse<CouponleoLocation>(),
     ),
     stores: await fetchCouponleoList(
       pageServerLoad,
       '/stores',
-      { location, pageSize: 120 },
+      { location, pageSize: topDealsStoreFetchLimit },
       emptyListResponse<CouponleoStore>(),
     ),
   };
@@ -545,6 +551,22 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
               </div>
             }
           </article>
+        </div>
+      </section>
+
+      <section class="couponleo-page-section">
+        <div class="couponleo-section-heading couponleo-section-heading--stacked">
+          <h2>{{ labels().faqTitle }}</h2>
+          <p>{{ labels().faqIntro }}</p>
+        </div>
+
+        <div class="couponleo-top-deals-copy-grid">
+          @for (faq of topDealsFaqs(); track faq.question) {
+            <article class="couponleo-copy-card">
+              <h3>{{ faq.question }}</h3>
+              <p>{{ faq.answer }}</p>
+            </article>
+          }
         </div>
       </section>
     }
@@ -971,6 +993,7 @@ export default class TopDealsPage {
   protected readonly i18n = inject(CouponleoI18nService);
   private readonly route = inject(ActivatedRoute);
   private readonly savedService = inject(CouponleoSavedService);
+  private readonly seoSync = inject(CouponleoSeoSyncService);
   private readonly initialLoad = this.route.snapshot.data['load'] as Awaited<ReturnType<typeof load>> | undefined;
   private readonly initialCountry = normalizeCountryRouteValue(this.route.snapshot.queryParamMap.get('country'));
   private readonly countryQueryParamMap = this.route.queryParamMap.pipe(
@@ -980,7 +1003,7 @@ export default class TopDealsPage {
   private readonly categoriesState = toSignal(
     withHydratedRequestState(
       of(undefined),
-      () => this.api.listCategories({ pageSize: 1000 }),
+      () => this.api.listCategories({ pageSize: topDealsCategoryFetchLimit }),
       emptyListResponse<CouponleoCategory>(),
       () => this.initialLoad?.categories,
     ),
@@ -992,7 +1015,7 @@ export default class TopDealsPage {
       (country) => this.api.listCoupons({
         active: true,
         location: locationFilterForCountry(country),
-        pageSize: 120,
+        pageSize: topDealsCouponFetchLimit,
       }),
       emptyListResponse<CouponleoCoupon>(),
       () => this.initialLoad?.coupons,
@@ -1004,7 +1027,7 @@ export default class TopDealsPage {
       this.countryQueryParamMap.pipe(startWith(this.initialCountry)),
       (country) => this.api.listStores({
         location: locationFilterForCountry(country),
-        pageSize: 120,
+        pageSize: topDealsStoreFetchLimit,
       }),
       emptyListResponse<CouponleoStore>(),
       () => this.initialLoad?.stores,
@@ -1014,7 +1037,7 @@ export default class TopDealsPage {
   private readonly locationsState = toSignal(
     withHydratedRequestState(
       of(undefined),
-      () => this.api.listLocations({ pageSize: 120 }),
+      () => this.api.listLocations({ pageSize: topDealsLocationFetchLimit }),
       emptyListResponse<CouponleoLocation>(),
       () => this.initialLoad?.locations,
     ),
@@ -1064,6 +1087,8 @@ export default class TopDealsPage {
     topDealsGuideTitle: this.i18n.phrase('How to read today\'s strongest deals'),
     narrowDealsTitle: this.i18n.phrase('How to separate real value from filler'),
     nextStopsTitle: this.i18n.phrase('Where to go after a deal catches your eye'),
+    faqTitle: this.i18n.phrase('What top-deals shoppers usually want to know'),
+    faqIntro: this.i18n.phrase('These quick answers help explain how to judge whether a deal deserves a closer look or should stay in the scroll.'),
   }));
   protected readonly isLoading = computed(() => (
     this.categoriesState().loading
@@ -1217,19 +1242,38 @@ export default class TopDealsPage {
 
   protected readonly editorialCopy = computed<TopDealsEditorialCopy>(() => ({
     intro: this.selectedCountry() === 'all'
-      ? this.i18n.phrase('Top Deals works best as a shortlist, not a final answer. Scan the best-looking savings first, then pressure-test them against the store or category before you commit.')
-      : `${this.i18n.phrase('You are browsing')} ${this.selectedCountry()}, ${this.i18n.phrase('so this deals list is already closer to the brands, stock conditions, and promo patterns that matter in that market.')}`,
+      ? this.i18n.phrase('Top Deals works best at the start of the hunt, when you want to see which offers deserve a closer look and which ones only sound exciting in isolation.')
+      : `${this.i18n.phrase('You are browsing')} ${this.selectedCountry()}, ${this.i18n.phrase('so this deals list already sits closer to the brands, stock conditions, and promo patterns that matter in that market.')}`,
     introDetail: this.selectedCountry() === 'all'
-      ? `${this.i18n.formatNumber(this.countryCouponTotal())} ${this.i18n.phrase('live offers are easier to compare when this page acts as the first filter instead of the last click.')}`
-      : this.i18n.phrase('That makes it easier to judge whether a coupon is truly relevant or just broadly visible while being locally weak.'),
-    strategy: this.i18n.phrase('Start with the headline saving, but read it alongside the merchant name, category, and expiry cues before treating it as the best option on the page.'),
-    strategyDetail: this.i18n.phrase('A strong deal card should make you curious enough to click deeper, not confident enough to stop comparing after one glance. The real winner is often the offer backed by a merchant that is discounting with depth, not just shouting the loudest.'),
+      ? `${this.i18n.formatNumber(this.countryCouponTotal())} ${this.i18n.phrase('live offers make more sense when you read the discount beside the merchant, category, and expiry signal instead of trusting the biggest number on the card.')}`
+      : this.i18n.phrase('That makes it easier to tell whether a coupon is truly relevant or simply visible while remaining locally weak.'),
+    strategy: this.i18n.phrase('Let the headline saving catch your eye, then use the merchant, category, and timing cues to decide whether the offer has real weight behind it.'),
+    strategyDetail: this.i18n.phrase('The better deals usually come from stores that are discounting with depth, not from the ones shouting with a single banner code.'),
     marketNote: this.selectedCountry() === 'all'
-      ? this.i18n.phrase('When something looks promising, open the matching store to see whether the merchant has depth behind it, then use the category when you want to compare the same buying intent across competing brands.')
+      ? this.i18n.phrase('When something looks promising, open the store to check whether the merchant has range behind it, then use the category if you want to compare the same buying intent across competing brands.')
       : `${this.i18n.phrase('Keeping the market fixed to')} ${this.selectedCountry()} ${this.i18n.phrase('is useful when delivery costs, excluded products, or region-specific promo rules can quietly change the real value of a discount.')}`,
-    nextStops: this.i18n.phrase('The best follow-up click depends on the question in your head: go to the store when you want to judge one brand more closely, or move into the category when you want to compare similar savings across several merchants.'),
-    nextStopsDetail: this.i18n.phrase('Used that way, this page becomes a strong first filter instead of a dead-end list of isolated offers. It helps you move from raw deal discovery into a smaller, smarter shortlist.'),
+    nextStops: this.i18n.phrase('A deal card is not the finish line. It is the clue that tells you where to look next.'),
+    nextStopsDetail: this.i18n.phrase('Used that way, this page turns raw coupon discovery into a cleaner shortlist instead of a long scroll of disconnected offers.'),
   }));
+  protected readonly topDealsFaqs = computed<CouponleoSeoFaqItem[]>(() => {
+    const topStore = this.storeDeals()[0]?.name ?? this.i18n.phrase('a strong store page');
+    const topCategory = this.dealFilters().find((filter) => filter.value !== 'all')?.label ?? this.i18n.phrase('a useful category');
+
+    return [
+      {
+        question: this.i18n.phrase('What makes a deal worth opening from this page?'),
+        answer: this.i18n.phrase('The better deals usually combine a strong headline saving with the right merchant, a believable expiry, and enough supporting depth on the store page to suggest the discount is not a one-off decoration.'),
+      },
+      {
+        question: this.i18n.phrase('When should you leave Top Deals and open a store page?'),
+        answer: `${this.i18n.phrase('Leave this page once a merchant such as')} ${topStore} ${this.i18n.phrase('starts looking stronger than the rest. The store page will tell you whether the same value carries across the wider offer mix or fades after one attractive card.')}`,
+      },
+      {
+        question: this.i18n.phrase('Why does category context still matter on a deal page?'),
+        answer: `${this.i18n.phrase('Category context matters because a tempting deal is easier to judge when you can compare it against the rest of')} ${topCategory} ${this.i18n.phrase('instead of treating one coupon card as the whole market.')}`,
+      },
+    ];
+  });
 
   protected readonly stats = computed<DealStat[]>(() => {
     const featuredCoupons = this.countryCoupons().filter((coupon) => coupon.featured).length;
@@ -1244,6 +1288,11 @@ export default class TopDealsPage {
   });
 
   constructor() {
+    effect(() => {
+      const faqs = this.topDealsFaqs();
+      this.seoSync.setPageFaqs(faqs);
+    });
+
     effect(() => {
       this.selectedCountry();
       untracked(() => {

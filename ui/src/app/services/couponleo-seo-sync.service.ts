@@ -26,6 +26,7 @@ const CANONICAL_ROUTE_ALIASES: Record<string, string> = {
   '/saved': '/wishlist',
   '/signin': '/sign-in',
   '/signup': '/sign-up',
+  '/terms-conditions': '/terms-of-use',
 };
 const COUNTRY_AWARE_ROUTE_PATTERNS = [
   /^\/$/,

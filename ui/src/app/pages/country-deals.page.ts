@@ -22,6 +22,7 @@ import {
   buildCouponleoCategoryCardDescription,
   buildCouponleoStoreCardDescriptionForMarket,
   resolveCouponleoLocationSpotlight,
+  resolveCouponleoStoreCategoryLabel,
 } from '../services/couponleo-seo-copy.helpers';
 import {
   fetchCouponleoList,
@@ -84,6 +85,11 @@ function emptyListResponse<T>() {
   return { items: [] as T[], total: 0 };
 }
 
+const countryDealsCategoryFetchLimit = 140;
+const countryDealsCouponFetchLimit = 160;
+const countryDealsLocationFetchLimit = 120;
+const countryDealsStoreFetchLimit = 96;
+
 export async function load(pageServerLoad: PageServerLoad) {
   const country = normalizeCountryRouteValue(readCouponleoQueryParam(pageServerLoad, 'country'));
   const location = locationFilterForCountry(country);
@@ -92,25 +98,25 @@ export async function load(pageServerLoad: PageServerLoad) {
     categories: await fetchCouponleoList(
       pageServerLoad,
       '/categories',
-      { pageSize: 1000 },
+      { pageSize: countryDealsCategoryFetchLimit },
       emptyListResponse<CouponleoCategory>(),
     ),
     coupons: await fetchCouponleoList(
       pageServerLoad,
       '/coupons',
-      { active: true, location, pageSize: 250 },
+      { active: true, location, pageSize: countryDealsCouponFetchLimit },
       emptyListResponse<CouponleoCoupon>(),
     ),
     locations: await fetchCouponleoList(
       pageServerLoad,
       '/locations',
-      { pageSize: 120 },
+      { pageSize: countryDealsLocationFetchLimit },
       emptyListResponse<CouponleoLocation>(),
     ),
     stores: await fetchCouponleoList(
       pageServerLoad,
       '/stores',
-      { location, pageSize: 120 },
+      { location, pageSize: countryDealsStoreFetchLimit },
       emptyListResponse<CouponleoStore>(),
     ),
   };
@@ -631,7 +637,7 @@ export default class CountryDealsPage {
   private readonly categoriesState = toSignal(
     withHydratedRequestState(
       of(undefined),
-      () => this.api.listCategories({ pageSize: 1000 }),
+      () => this.api.listCategories({ pageSize: countryDealsCategoryFetchLimit }),
       emptyListResponse<CouponleoCategory>(),
       () => this.initialLoad?.categories,
     ),
@@ -643,7 +649,7 @@ export default class CountryDealsPage {
       (country) => this.api.listCoupons({
         active: true,
         location: locationFilterForCountry(country),
-        pageSize: 250,
+        pageSize: countryDealsCouponFetchLimit,
       }),
       emptyListResponse<CouponleoCoupon>(),
       () => this.initialLoad?.coupons,
@@ -655,7 +661,7 @@ export default class CountryDealsPage {
       this.countryQueryParamMap.pipe(startWith(this.initialCountry)),
       (country) => this.api.listStores({
         location: locationFilterForCountry(country),
-        pageSize: 120,
+        pageSize: countryDealsStoreFetchLimit,
       }),
       emptyListResponse<CouponleoStore>(),
       () => this.initialLoad?.stores,
@@ -665,7 +671,7 @@ export default class CountryDealsPage {
   private readonly locationsState = toSignal(
     withHydratedRequestState(
       of(undefined),
-      () => this.api.listLocations({ pageSize: 120 }),
+      () => this.api.listLocations({ pageSize: countryDealsLocationFetchLimit }),
       emptyListResponse<CouponleoLocation>(),
       () => this.initialLoad?.locations,
     ),
@@ -781,7 +787,7 @@ export default class CountryDealsPage {
         id: `country-store-${store.slug}`,
         name: store.name,
         location: store.location,
-        category: store.category,
+        category: resolveCouponleoStoreCategoryLabel(store) || store.category,
         description: buildCouponleoStoreCardDescriptionForMarket(store, this.selectedCountry()),
         deals: formatCount(store.activeCoupons, 'live deal', 'live deals'),
         route: this.localizeRoute(buildStoreRoute(store.slug)),

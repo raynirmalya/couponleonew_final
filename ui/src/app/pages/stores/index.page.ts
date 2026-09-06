@@ -1,4 +1,5 @@
-import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { isPlatformServer } from '@angular/common';
+import { Component, DestroyRef, PLATFORM_ID, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { type PageServerLoad } from '@analogjs/router';
@@ -19,7 +20,10 @@ import { createDynamicRouteMeta } from '../../services/couponleo-route-meta';
 import { CouponleoI18nService } from '../../services/couponleo-i18n.service';
 import { proxiedCouponleoLogoUrl } from '../../services/couponleo-logo.helpers';
 import { CouponleoSavedService } from '../../services/couponleo-saved.service';
-import { buildCouponleoStoreCardDescriptionForMarket } from '../../services/couponleo-seo-copy.helpers';
+import {
+  buildCouponleoStoreCardDescriptionForMarket,
+  resolveCouponleoStoreCategoryLabel,
+} from '../../services/couponleo-seo-copy.helpers';
 import {
   fetchCouponleoData,
   fetchCouponleoList,
@@ -94,6 +98,8 @@ export const routeMeta = createDynamicRouteMeta((route) => {
 
 const alphabet = ['All', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '#'];
 const storesPageSize = 6;
+const storeCategoryFetchLimit = 60;
+const storeLocationFetchLimit = 80;
 
 function emptyListResponse<T>() {
   return {
@@ -129,7 +135,7 @@ export async function load(pageServerLoad: PageServerLoad) {
     categories: await fetchCouponleoList(
       pageServerLoad,
       '/categories',
-      { pageSize: 120 },
+      { pageSize: storeCategoryFetchLimit },
       emptyListResponse<CouponleoCategory>(),
     ),
     directoryStores: await fetchCouponleoList(
@@ -147,7 +153,7 @@ export async function load(pageServerLoad: PageServerLoad) {
     locations: await fetchCouponleoList(
       pageServerLoad,
       '/locations',
-      { pageSize: 120 },
+      { pageSize: storeLocationFetchLimit },
       emptyListResponse<CouponleoLocation>(),
     ),
   };
@@ -197,7 +203,7 @@ function toStoreCardViewModel(store: CouponleoStore, selectedCountry: string): S
     description: buildCouponleoStoreCardDescriptionForMarket(store, selectedCountry),
     route: buildStoreRoute(store.slug),
     location: store.location,
-    category: store.category,
+    category: resolveCouponleoStoreCategoryLabel(store) || store.category,
     savings: store.savings,
     featured: store.featured,
     logoUrl: storeLogoUrl(store),
@@ -1151,6 +1157,7 @@ function toStoreCardViewModel(store: CouponleoStore, selectedCountry: string): S
   `],
 })
 export default class StoresPage {
+  private readonly platformId = inject(PLATFORM_ID);
   private readonly api = inject(CouponleoApiService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly i18n = inject(CouponleoI18nService);
@@ -1179,7 +1186,7 @@ export default class StoresPage {
   private readonly categoriesState = toSignal(
     withHydratedRequestState(
       of(undefined),
-      () => this.api.listCategories({ pageSize: 120 }),
+      () => this.api.listCategories({ pageSize: storeCategoryFetchLimit }),
       emptyListResponse<CouponleoCategory>(),
       () => this.initialLoad?.categories,
     ),
@@ -1229,7 +1236,7 @@ export default class StoresPage {
   private readonly locationsState = toSignal(
     withHydratedRequestState(
       of(undefined),
-      () => this.api.listLocations({ pageSize: 120 }),
+      () => this.api.listLocations({ pageSize: storeLocationFetchLimit }),
       emptyListResponse<CouponleoLocation>(),
       () => this.initialLoad?.locations,
     ),
@@ -1486,6 +1493,10 @@ export default class StoresPage {
   }
 
   private ensureStoreLogoFallback(store: StoreCardViewModel): void {
+    if (isPlatformServer(this.platformId)) {
+      return;
+    }
+
     if (!isBlockedStoreLogoUrl(store.logoUrl)) {
       return;
     }

@@ -40,6 +40,46 @@ function trimSentenceEnding(value: string | undefined): string {
   return String(value ?? '').replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '');
 }
 
+function trimNarrative(value: string | undefined): string {
+  const normalized = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  const expandedEllipsis = normalized.replace(/…/g, '...');
+  if (!expandedEllipsis.endsWith('...')) {
+    return normalized;
+  }
+
+  const withoutEllipsis = expandedEllipsis.replace(/\.\.\.$/, '').trim();
+  const lastSentenceBoundary = withoutEllipsis.lastIndexOf('.');
+
+  if (lastSentenceBoundary >= 40) {
+    return withoutEllipsis.slice(0, lastSentenceBoundary + 1).trim();
+  }
+
+  return withoutEllipsis;
+}
+
+function hasEditorialDepth(value: string | undefined, minWords = 6, minLength = 40): boolean {
+  const normalized = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized.length >= minLength && normalized.split(' ').length >= minWords;
+}
+
+function editorialCandidates(
+  values: Array<string | null | undefined>,
+  minWords = 6,
+  minLength = 40,
+): string[] {
+  return uniqueText(values)
+    .map((value) => trimNarrative(value))
+    .filter((value) => hasEditorialDepth(value, minWords, minLength) && !isLowValueSeoCopy(value));
+}
+
 function clampMetaDescription(value: string, maxLength = 165): string {
   const normalized = String(value ?? '').replace(/\s+/g, ' ').trim();
   if (!normalized || normalized.length <= maxLength) {
@@ -73,6 +113,9 @@ function isLowValueSeoCopy(value: string | undefined): boolean {
     /^\d[\d,\s]*(?:active|live)\s(?:coupon|coupons|deal|deals|offer|offers)\b/i,
     /\bhas \d[\d,\s]*(?:active|live)\s(?:coupon|coupons|deal|deals|offer|offers)\b/i,
     /\bis a strong stop for\b.*\band \d[\d,\s]*(?:active|live)\s(?:coupon|coupons|deal|deals|offer|offers)\s(?:are|is)\sactive\b/i,
+    /\bis a useful stop for shoppers buying\b/i,
+    /\bis worth checking when you want a broader read on the brand's current savings\b/i,
+    /\bis a practical category to browse when you want a wider read on today's\b/i,
     /\brefreshed from couponleo/i,
     /\bcouponleo(?:'s)? (?:real )?(?:coupon )?(?:feed|catalog|data)\b/i,
     /\blive offers?\b.*\bacross\b.*\bstores?\b\.?$/i,
@@ -83,6 +126,16 @@ function isLowValueSeoCopy(value: string | undefined): boolean {
     /\bstore with \d[\d,\s]*(?:active|live)?\s*(?:coupon|coupons|deal|deals|offer|offers)\b/i,
     /\bmaking it easier to spot coupon codes, price cuts, and limited-time checkout savings before you buy\b/i,
     /\bfor shoppers who want to compare discounts before visiting\b/i,
+    /\bright now the category spans \d[\d,\s]*/i,
+    /\bis worth a look when shoppers\b.*\bwant a clearer picture of today's\b/i,
+    /\bis worth a look when\b.*\bbefore they head to\b/i,
+    /\bthis page gathers the live deal mix before checkout\b/i,
+    /\bworks best when you want to judge today's\b/i,
+    /\bis useful when you want a cleaner read on today's\b/i,
+    /\buse .* as a quick way to size up today's\b/i,
+    /\bbest used when the product theme is clear but the winning merchant is not\b/i,
+    /\ba practical way to scan\b.*\bacross competing stores\b/i,
+    /\ba practical market view for comparing active brands\b/i,
   ];
 
   return lowSignalPatterns.some((pattern) => pattern.test(normalized));
@@ -91,6 +144,21 @@ function isLowValueSeoCopy(value: string | undefined): boolean {
 function countLabel(value: number | undefined, singular: string, plural: string): string {
   const count = Math.max(0, Math.trunc(Number(value ?? 0) || 0));
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function stableVariant(seed: string, options: string[]): string {
+  if (options.length === 0) {
+    return '';
+  }
+
+  const normalizedSeed = seed.trim().toLowerCase() || 'couponleo';
+  let hash = 0;
+
+  for (const character of normalizedSeed) {
+    hash = ((hash * 33) + character.charCodeAt(0)) >>> 0;
+  }
+
+  return options[hash % options.length] ?? options[0] ?? '';
 }
 
 function categoryCopy(value: string | undefined): string {
@@ -110,7 +178,7 @@ function marketCopy(value: string | undefined): string {
 function marketAudienceCopy(value: string | undefined): string {
   const normalized = String(value ?? '').trim();
   if (!normalized || normalized.toLowerCase() === 'global') {
-    return 'shoppers comparing options across markets';
+    return 'global shoppers';
   }
 
   return `shoppers in ${normalized}`;
@@ -130,6 +198,15 @@ function joinReadableList(values: string[]): string {
   }
 
   return `${values.slice(0, -1).join(', ')}, and ${values.at(-1)}`;
+}
+
+function titleCaseWords(value: string | undefined): string {
+  return String(value ?? '')
+    .trim()
+    .split(/[\s/_-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 function topicIdeasForCategory(value: string | undefined): string {
@@ -183,28 +260,221 @@ function categoryPlanningCopy(value: string | undefined): string {
   return topicIdeasForCategory(value);
 }
 
+function storeThemeLabel(store: CouponleoStore | null | undefined): string {
+  const categoryLabel = String(store?.category ?? '').trim();
+  if (categoryLabel && categoryLabel.toLowerCase() !== 'other') {
+    return categoryLabel;
+  }
+
+  const categoryHint = String(store?.category_hint ?? '').trim();
+  if (categoryHint && !['general', 'other', 'mixed'].includes(categoryHint.toLowerCase())) {
+    return categoryHint;
+  }
+
+  return '';
+}
+
+function storeDisplayLabel(value: string | undefined): string {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return '';
+  }
+
+  const heuristics: Array<[RegExp, string]> = [
+    [/pet|animal/, 'Pet Supplies'],
+    [/kitchen|cook|dining/, 'Kitchen Essentials'],
+    [/camera|photo|video/, 'Cameras & Creator Gear'],
+    [/computer|laptop|tech|device|software|electronic|gadget/, 'Electronics'],
+    [/fashion|clothing|footwear|handbag|jewell|beauty|makeup/, 'Fashion & Beauty'],
+    [/home|furniture|decor|appliance/, 'Home & Decor'],
+    [/auto|car|motor/, 'Auto Accessories'],
+    [/toy|game|kids|baby/, 'Gifts & Family'],
+    [/travel|hotel|flight/, 'Travel'],
+    [/health|medical|body|care/, 'Wellness & Care'],
+    [/gift/, 'Gift Ideas'],
+  ];
+
+  return heuristics.find(([pattern]) => pattern.test(normalized))?.[1] ?? titleCaseWords(normalized);
+}
+
+export function resolveCouponleoStoreCategoryLabel(store: CouponleoStore | null | undefined): string {
+  const categoryLabel = String(store?.category ?? '').trim();
+  if (categoryLabel && categoryLabel.toLowerCase() !== 'other') {
+    return storeDisplayLabel(categoryLabel);
+  }
+
+  return storeDisplayLabel(storeThemeLabel(store) || categoryLabel);
+}
+
+function shoppingLaneCopy(value: string | undefined): string {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return 'storewide offers';
+  }
+
+  const heuristics: Array<[RegExp, string]> = [
+    [/pet|animal/, 'pet supplies'],
+    [/kitchen|cook|dining/, 'kitchen essentials'],
+    [/camera|photo|video/, 'camera and creator gear'],
+    [/computer|laptop|tech|device|software|electronic|gadget/, 'electronics and accessories'],
+    [/fashion|clothing|footwear|handbag|jewell|beauty|makeup/, 'fashion, beauty, and accessories'],
+    [/home|furniture|decor|appliance/, 'home and decor'],
+    [/auto|car|motor/, 'auto accessories and driving essentials'],
+    [/toy|game|kids|baby/, 'giftable family buys'],
+    [/travel|hotel|flight/, 'travel bookings and extras'],
+    [/health|medical|body|care/, 'wellness and personal care'],
+    [/gift/, 'gift ideas'],
+  ];
+
+  const matched = heuristics.find(([pattern]) => pattern.test(normalized));
+  return matched?.[1] ?? normalized;
+}
+
 function storePrimaryNarrative(store: CouponleoStore | null | undefined): string {
   if (!store) {
     return '';
   }
 
-  const candidates = uniqueText([
+  const candidates = editorialCandidates([
+    store.description,
+    ...(store.seoParagraphs ?? []),
     store.websiteDescription,
     store.websiteMetaDescription,
-    store.description,
+    store.metaDescription,
     store.headline,
   ]);
 
-  return candidates.find((candidate) => !isLowValueSeoCopy(candidate)) ?? '';
+  return candidates[0] ?? '';
 }
 
 function storeSavingsFocus(store: CouponleoStore | null | undefined): string {
-  const categoryLabel = String(store?.category ?? '').trim();
-  if (!categoryLabel || categoryLabel.toLowerCase() === 'other') {
+  const themeLabel = storeThemeLabel(store);
+  if (!themeLabel) {
     return 'live coupon codes, markdowns, and checkout offers';
   }
 
-  return `${categoryCopy(categoryLabel)} deals, coupon codes, and sale pricing`;
+  return `${shoppingLaneCopy(themeLabel)} offers and coupon codes`;
+}
+
+function storeOfferCount(store: CouponleoStore | null | undefined): number {
+  return Math.max(0, Math.trunc(Number(store?.activeCoupons ?? store?.couponCount ?? 0) || 0));
+}
+
+function storeContextSeed(store: CouponleoStore | null | undefined, suffix = ''): string {
+  return [
+    String(store?.name ?? '').trim(),
+    String(store?.slug ?? '').trim(),
+    String(store?.location ?? '').trim(),
+    String(store?.category ?? '').trim(),
+    suffix,
+  ].join('|');
+}
+
+function storeCoverageSentence(store: CouponleoStore | null | undefined, host: string): string {
+  const activeOfferCount = storeOfferCount(store);
+  const seed = storeContextSeed(store, 'coverage');
+
+  if (activeOfferCount >= 2500) {
+    return stableVariant(seed, [
+      `With ${countLabel(activeOfferCount, 'live offer', 'live offers')} in play, ${host} looks like more than a one-coupon stop.`,
+      `${countLabel(activeOfferCount, 'live offer', 'live offers')} make it easier to tell whether the stronger value is hiding in broad markdowns, stacked codes, or a few standout offers.`,
+      `${countLabel(activeOfferCount, 'live offer', 'live offers')} give this store enough visible depth to feel worth a serious look.`,
+    ]);
+  }
+
+  if (activeOfferCount >= 250) {
+    return stableVariant(seed, [
+      `${countLabel(activeOfferCount, 'live offer', 'live offers')} are usually enough to show whether the brand is discounting with depth or simply teasing with a few bright hooks.`,
+      `The current mix of ${countLabel(activeOfferCount, 'live offer', 'live offers')} gives you a decent read on how much value is really on the table today.`,
+      `${countLabel(activeOfferCount, 'live offer', 'live offers')} make it easier to judge whether the better buy sits in coupon codes, markdowns, or short-lived sale pushes.`,
+    ]);
+  }
+
+  if (activeOfferCount > 0) {
+    return stableVariant(seed, [
+      `${countLabel(activeOfferCount, 'live offer', 'live offers')} are visible right now, which is enough for a quick sense check before you head to ${host}.`,
+      `The live mix is lighter at ${countLabel(activeOfferCount, 'offer', 'offers')}, so this works best as a fast check rather than a long browse.`,
+      `${countLabel(activeOfferCount, 'live offer', 'live offers')} still give you a useful reality check on whether there is a genuine saving to follow.`,
+    ]);
+  }
+
+  return stableVariant(seed, [
+    `Even without a live offer showing right now, you still get a cleaner read on the merchant before opening ${host}.`,
+    `A quiet deal board is still useful when you want context before waiting for the next stronger discount cycle.`,
+    `It can still serve as a quick store brief, even when the live mix is temporarily flat.`,
+  ]);
+}
+
+function storeMarketSentence(
+  store: CouponleoStore | null | undefined,
+  selectedCountry: string,
+  host: string,
+): string {
+  const seed = storeContextSeed(store, `market-${selectedCountry}`);
+
+  if (selectedCountry !== 'all') {
+    return stableVariant(seed, [
+      `In ${selectedCountry}, delivery costs, exclusions, and local promo rules can change the final value faster than the headline saving suggests.`,
+      `The market filter matters in ${selectedCountry}, where local pricing rules can decide whether ${host} still feels worth the visit.`,
+      `That extra context earns its keep in ${selectedCountry}, especially when shipping thresholds or regional promo limits start reshaping the basket.`,
+    ]);
+  }
+
+  if (store?.location && store.location.toLowerCase() !== 'global') {
+    return stableVariant(seed, [
+      `${host} gets more interesting once you remember that shipping rules, stock, or promo eligibility can shift outside ${store.location}.`,
+      `The market context matters here because the strongest version of the deal may not travel cleanly outside ${store.location}.`,
+      `That location angle helps when the merchant looks active but the final value can still move with shipping thresholds or regional coupon rules.`,
+    ]);
+  }
+
+  return stableVariant(seed, [
+    `The wider view helps you see whether the store is discounting with real intent today or just leaning on one flashy promotion.`,
+    `It is a cleaner way to judge the merchant before a single eye-catching deal starts making the decision for you.`,
+    `The goal is simple: decide whether the offer mix feels broad enough to reward the click or thin enough to keep comparing.`,
+  ]);
+}
+
+function storeCategorySentence(store: CouponleoStore | null | undefined, host: string): string {
+  const categoryLabel = storeThemeLabel(store);
+  const seed = storeContextSeed(store, 'category');
+
+  if (!categoryLabel) {
+    return stableVariant(seed, [
+      `Stores like ${host} are hardest to judge from one headline offer alone because the real value can sit in a stranger, less neatly labeled promotion.`,
+      `A broader mix like this helps when the best saving comes from an unusual promotion rather than a neat category path.`,
+      `${host} is better suited to open-ended browsing when the inventory cuts across several shopping intents at once.`,
+    ]);
+  }
+
+  return stableVariant(seed, [
+    `In ${categoryCopy(categoryLabel)}, small shifts in coupon depth, markdown timing, or bundle pricing can change the final value quickly.`,
+    `In ${shoppingLaneCopy(categoryLabel)}, the stronger buy often comes from the brand combining live codes with broader sale pressure.`,
+    `${host} becomes easier to judge once you can see whether today's ${storeSavingsFocus(store)} feel broad or narrowly promoted.`,
+  ]);
+}
+
+function storeOpeningSentence(
+  store: CouponleoStore | null | undefined,
+  selectedCountry: string,
+  host: string,
+): string {
+  const focus = storeSavingsFocus(store);
+  const seed = storeContextSeed(store, `opening-${selectedCountry}`);
+
+  if (selectedCountry !== 'all') {
+    return stableVariant(seed, [
+      `Start here if you want a cleaner read on ${host}'s current mix of ${focus} before local checkout details in ${selectedCountry} start steering the decision.`,
+      `${host} is easier to compare once the live mix of ${focus} sits beside other options relevant to shoppers in ${selectedCountry}.`,
+      `This is the faster way to judge whether ${host} has real depth in ${focus} before the merchant's own sales pitch starts doing too much of the talking.`,
+    ]);
+  }
+
+  return stableVariant(seed, [
+    `Before you head to ${host}, it helps to see what the current mix of ${focus} actually looks like today.`,
+    `If ${store?.name ?? host} is already on the shortlist, this is the faster way to check whether today's ${focus} feel genuinely strong or merely eye-catching.`,
+    `${store?.name ?? host} is easier to judge here when you want the savings picture before the merchant starts selling the story itself.`,
+  ]);
 }
 
 export function extractCouponleoWebsiteHost(url?: string, fallback = ''): string {
@@ -229,17 +499,17 @@ export function resolveCouponleoStoreDescription(
     return fallback.trim();
   }
 
-  const candidates = uniqueText([
+  const candidates = editorialCandidates([
+    store.description,
+    ...(store.seoParagraphs ?? []),
     store.websiteDescription,
     store.websiteMetaDescription,
     store.metaDescription,
-    store.description,
     store.headline,
     fallback,
-    ...(store.seoParagraphs ?? []),
   ]);
 
-  return candidates.find((candidate) => !isLowValueSeoCopy(candidate)) ?? fallback.trim();
+  return candidates[0] ?? fallback.trim();
 }
 
 export function resolveCouponleoCategoryDescription(
@@ -250,15 +520,15 @@ export function resolveCouponleoCategoryDescription(
     return fallback.trim();
   }
 
-  const candidates = uniqueText([
-    category.metaDescription,
+  const candidates = editorialCandidates([
     category.description,
+    ...(category.seoParagraphs ?? []),
+    category.metaDescription,
     category.headline,
     fallback,
-    ...(category.seoParagraphs ?? []),
   ]);
 
-  return candidates.find((candidate) => !isLowValueSeoCopy(candidate)) ?? fallback.trim();
+  return candidates[0] ?? fallback.trim();
 }
 
 export function buildCouponleoStoreCardDescription(store: CouponleoStore | null | undefined): string {
@@ -274,23 +544,28 @@ export function buildCouponleoStoreCardDescriptionForMarket(
   }
 
   const host = store.websiteHost || extractCouponleoWebsiteHost(store.url, store.name);
-  const marketAudience = selectedCountry !== 'all'
-    ? `shoppers in ${selectedCountry}`
-    : marketAudienceCopy(store.location);
-  const narrative = storePrimaryNarrative(store);
-  const fallback = selectedCountry !== 'all'
-    ? `${store.name} helps ${marketAudience} assess ${storeSavingsFocus(store)} before heading to ${host}.`
-    : `${store.name} gives ${marketAudience} a clearer read on ${storeSavingsFocus(store)} before heading to ${host}.`;
+  const narrative = resolveCouponleoStoreDescription(store);
+  const secondSentence = stableVariant(storeContextSeed(store, `fallback-second-${selectedCountry}`), [
+    storeCoverageSentence(store, host),
+    storeCategorySentence(store, host),
+    storeMarketSentence(store, selectedCountry, host),
+  ]);
 
-  if (narrative) {
-    if (selectedCountry !== 'all') {
-      return `${ensureSentence(narrative)} CouponLeo shoppers in ${selectedCountry} can use this page to compare the live savings visible before opening ${host}.`;
-    }
-
-    return ensureSentence(narrative);
+  if (hasEditorialDepth(narrative, 7, 50)) {
+    return uniqueText([
+      ensureSentence(narrative),
+      stableVariant(storeContextSeed(store, `narrative-second-${selectedCountry}`), [
+        storeCoverageSentence(store, host),
+        storeCategorySentence(store, host),
+        storeMarketSentence(store, selectedCountry, host),
+      ]),
+    ]).slice(0, 2).join(' ');
   }
 
-  return fallback;
+  return uniqueText([
+    ensureSentence(storeOpeningSentence(store, selectedCountry, host)),
+    secondSentence,
+  ]).slice(0, 2).join(' ');
 }
 
 export function buildCouponleoCategoryCardDescription(
@@ -301,9 +576,18 @@ export function buildCouponleoCategoryCardDescription(
   }
 
   const fallback = String(category.name ?? '').trim().toLowerCase() === 'other'
-    ? 'This broad collection is useful when the best option may come from niche brands, mixed product types, or hard-to-classify promotions.'
-    : `${category.name} brings together ${categoryPlanningCopy(category.name)} across multiple stores so you can compare the field before choosing a brand.`;
-  return resolveCouponleoCategoryDescription(category, fallback);
+    ? stableVariant(String(category.name ?? ''), [
+        'This is where mixed-basket offers, harder-to-classify discounts, and the odd finds from smaller merchants tend to surface first.',
+        'Think of Other as the open shelf: unusual deals, awkwardly labeled promotions, and useful bargains that do not fit neatly elsewhere.',
+        'Other rewards shoppers who are willing to browse a little wider, especially when the strongest deal does not belong to a tidy category lane.',
+      ])
+    : stableVariant(String(category.name ?? ''), [
+        `${category.name} is a strong place to compare ${categoryPlanningCopy(category.name)} across several merchants before one store takes over the shortlist.`,
+        `When the product is clear but the winning merchant is not, ${category.name} gives you room to compare ${categoryPlanningCopy(category.name)} before clicking deeper.`,
+        `${category.name} works best as a side-by-side view of ${categoryPlanningCopy(category.name)}, so the stronger offer mix can earn the next click.`,
+      ]);
+  const resolved = resolveCouponleoCategoryDescription(category, fallback);
+  return hasEditorialDepth(resolved, 6, 36) ? resolved : fallback;
 }
 
 export function resolveCouponleoLocationSpotlight(
@@ -316,7 +600,9 @@ export function resolveCouponleoLocationSpotlight(
   const market = 'country' in location
     ? (location.country || location.name || 'this market')
     : ('location' in location ? location.location : location.name) || 'this market';
-  const fallback = `${market} is a practical market view for comparing active brands, category depth, and current savings before you narrow the search to one merchant.`;
+  const fallback = String(market).trim().toLowerCase() === 'global'
+    ? 'Global gives you the broadest read on where stores, categories, and live offers are showing real depth right now.'
+    : `${market} gives you a clearer read on which stores, categories, and live offers are genuinely competitive for shoppers there today.`;
   const candidates = uniqueText([
     'spotlight' in location ? location.spotlight : '',
     fallback,
@@ -334,26 +620,38 @@ export function buildCouponleoStoreSeoParagraphs(
   }
 
   const host = store.websiteHost || extractCouponleoWebsiteHost(store.url, store.name);
-  const merchantDescription = buildCouponleoStoreCardDescriptionForMarket(store, selectedCountry);
-  const activeOfferCount = store.activeCoupons || store.couponCount || 0;
-  const offerStrategyParagraph = store.category && store.category.toLowerCase() !== 'other'
-    ? `${store.name} tends to matter most for shoppers chasing ${categoryPlanningCopy(store.category)}, because the real value often depends on whether today's savings lean toward direct markdowns, coupon codes, or short-run bundle offers.`
-    : `${store.name} is easiest to judge when you look past one headline discount and check whether the current mix has real depth across codes, markdowns, and short-run promotions.`;
-  const shopperParagraph = selectedCountry !== 'all'
-    ? `For shoppers in ${selectedCountry}, the live mix here gives a faster sense of whether ${host} feels competitive in that market, especially when delivery costs, excluded products, or local promo rules can change the final price.`
-    : store.location && store.location.toLowerCase() !== 'global'
-      ? `${store.name} is especially worth comparing when location matters, because pricing, shipping thresholds, and coupon eligibility can shift once you move outside ${store.location}.`
-      : `${store.name} is most useful when you want to know whether the merchant is discounting with real intent today rather than surfacing a single attractive offer without much depth behind it.`;
-  const coverageParagraph = activeOfferCount > 0
-    ? `${countLabel(activeOfferCount, 'live offer', 'live offers')} are active right now, which makes it easier to compare quick-win coupon codes against broader storewide savings before you open ${host}.`
-    : '';
+  const narrative = resolveCouponleoStoreDescription(store);
+  const storedParagraphs = editorialCandidates(store.seoParagraphs ?? [], 10, 72);
+  const activeOfferCount = storeOfferCount(store);
+  const coverageParagraph = storeCoverageSentence(store, host);
+  const shopperParagraph = storeMarketSentence(store, selectedCountry, host);
+  const offerStrategyParagraph = storeCategorySentence(store, host);
   const exampleSentence = exampleOfferSentence(store);
   const closingParagraph = exampleSentence
-    ? `${exampleSentence} That gives you a more concrete feel for how ${host} is discounting right now, from category-specific promotions to checkout-ready offers.`
-    : `If the offer mix feels quiet today, it can be smarter to compare another merchant first and return when ${host} is running a stronger savings cycle.`;
+    ? `${exampleSentence} Read it as proof of the merchant's current style of discounting, not just as a random coupon sample.`
+    : activeOfferCount > 0
+      ? stableVariant(storeContextSeed(store, 'closing-live'), [
+          `If the mix still feels thin after a quick scan, keep comparing. The better next click is usually the one backed by more than one attractive offer.`,
+          `If the strongest deal still looks too narrow, let that be the signal to compare another merchant before checkout.`,
+          `If the page feels lighter than the headline suggests, it is smarter to keep the shortlist open a little longer.`,
+        ])
+      : stableVariant(storeContextSeed(store, 'closing-quiet'), [
+          `When the deal board is quiet, keep the merchant on the list but wait for a stronger cycle before treating it as the best next click.`,
+          `A quiet page still has value, but it usually means the better move is to compare another store first and come back later.`,
+          `If the live mix is flat today, treat this as context rather than a final answer and keep scanning the field.`,
+        ]);
+
+  if (storedParagraphs.length > 0) {
+    return uniqueText([
+      narrative,
+      ...storedParagraphs,
+      coverageParagraph,
+      shopperParagraph,
+    ]).slice(0, 5);
+  }
 
   return uniqueText([
-    merchantDescription,
+    narrative || storeOpeningSentence(store, selectedCountry, host),
     offerStrategyParagraph,
     shopperParagraph,
     coverageParagraph,
@@ -377,7 +675,7 @@ export function buildCouponleoStoreKeywordHighlightsForMarket(
     return [];
   }
 
-  const categoryLabel = String(store.category ?? '').trim();
+  const categoryLabel = resolveCouponleoStoreCategoryLabel(store);
   const categoryLine = categoryLabel && categoryLabel.toLowerCase() !== 'other'
     ? selectedCountry !== 'all'
       ? `${categoryLabel} deals in ${selectedCountry}`
@@ -406,18 +704,53 @@ export function buildCouponleoCategorySeoParagraphs(
   const liveStoreCount = context.storeCount || category.storeCount || 0;
   const categoryIdeas = categoryPlanningCopy(category.name);
   const shopperDescription = buildCouponleoCategoryCardDescription(category);
-  const countParagraph = String(category.name ?? '').trim().toLowerCase() === 'other'
-    ? `Right now this collection brings together ${countLabel(liveDealCount, 'live deal', 'live deals')} from ${countLabel(liveStoreCount, 'store', 'stores')}, which is useful when the strongest option could still come from a niche merchant or a mixed-category offer.`
-    : `Right now ${category.name} brings together ${countLabel(liveDealCount, 'live deal', 'live deals')} from ${countLabel(liveStoreCount, 'store', 'stores')}, giving you enough depth to compare not just one headline discount but the wider offer pressure across this topic.`;
-  const intentParagraph = String(category.name ?? '').trim().toLowerCase() === 'other'
-    ? 'Other works best when you are browsing with open intent and the best option may come from mixed product types, hard-to-classify promos, or smaller stores that would be easy to miss in a narrower search.'
-    : `Shoppers usually browse ${category.name} before they have settled on one brand, which makes this hub useful for comparing ${categoryIdeas}, competing merchants, and the overall quality of current discounts in one place.`;
+  const storedParagraphs = editorialCandidates(category.seoParagraphs ?? [], 10, 72);
+  const lowerName = String(category.name ?? '').trim().toLowerCase();
+  const countParagraph = lowerName === 'other'
+    ? `${countLabel(liveDealCount, 'live deal', 'live deals')} from ${countLabel(liveStoreCount, 'store', 'stores')} give this category enough range to surface the odd, niche, and mixed-basket deals that disappear in narrower searches.`
+    : `${countLabel(liveDealCount, 'live deal', 'live deals')} from ${countLabel(liveStoreCount, 'store', 'stores')} make it easier to see whether this topic is being discounted by one aggressive merchant or across the field.`;
+  const intentParagraph = lowerName === 'other'
+    ? stableVariant(lowerName, [
+        'Other is strongest when you are browsing with open intent and do not want every useful deal forced into a neat shopping lane.',
+        'Other becomes especially useful when the best promotion comes from a smaller merchant, an unusual bundle, or a mixed basket that would never dominate a tidier shopping lane.',
+        'Other earns its place when discovery matters more than taxonomy and the next strong offer could arrive from almost anywhere in the directory.',
+      ])
+    : stableVariant(lowerName, [
+        `The category earns its keep before one brand has earned the click, because it keeps the full merchant field visible while you compare ${categoryIdeas}.`,
+        `You learn more here from the wider field than from any single storefront pitch, especially when several merchants are competing on ${categoryIdeas}.`,
+        `The real advantage is seeing how several brands price ${categoryIdeas} at once instead of trusting the first merchant that looks confident.`,
+      ]);
   const marketParagraph = context.selectedCountry !== 'all'
-    ? `The current view is tuned to ${context.selectedCountry}, which is especially helpful when shipping rules, local stock, or coupon eligibility can change from one market to another.`
-    : 'The broad market view is useful when you want to see where this category feels genuinely active before you narrow to one country or one merchant.';
-  const closingParagraph = String(category.name ?? '').trim().toLowerCase() === 'other'
-    ? 'Once a merchant starts standing out from the noise, the next smart move is the store view, where you can check whether that brand has real offer depth or just one standout promotion.'
-    : `Once one merchant starts standing out, move into the store view to see whether the same saving style carries across the brand or whether the better value still sits elsewhere in ${category.name}.`;
+    ? stableVariant(`${lowerName}-${context.selectedCountry}`, [
+        `This view is already narrowed to ${context.selectedCountry}, which matters once local stock, delivery costs, and regional promo rules begin to change the real value of the same offer.`,
+        `Keeping the category focused on ${context.selectedCountry} helps when the final decision depends on what shoppers in that market can actually check out with today.`,
+        `${context.selectedCountry} can tell a very different story from the broader global view, so the market filter earns its place here.`,
+      ])
+    : stableVariant(lowerName, [
+        'The broader market view is useful when you want to see where the category feels genuinely active before narrowing the search to one country or one merchant.',
+        'Starting broad makes it easier to notice whether the strongest version of the deal is clustered in one market or spread more evenly across the directory.',
+        'That wider lens matters because the best merchant for this category does not always look the same once market-specific rules begin to influence checkout.',
+      ]);
+  const closingParagraph = lowerName === 'other'
+    ? stableVariant(lowerName, [
+        'Once one merchant starts separating itself from the noise, the smarter next step is a closer merchant read to judge whether the depth is real or only one promotion deep.',
+        'When a store finally stands out here, move closer and confirm that the strength carries beyond a single eye-catching offer.',
+        'The real value here is knowing when to stop browsing broadly and move into the one store that looks convincingly active.',
+      ])
+    : stableVariant(lowerName, [
+        `Once a merchant starts standing out, move closer and check whether the same pricing pressure carries across the brand or fades after one highlight deal.`,
+        `The next smart move is a closer merchant read, where you can see whether one brand's strong first impression holds up once the full offer mix is visible.`,
+        `After the category narrows the field, the merchant-level view tells you whether the same brand still deserves the final click.`,
+      ]);
+
+  if (storedParagraphs.length > 0) {
+    return uniqueText([
+      shopperDescription,
+      ...storedParagraphs,
+      countParagraph,
+      marketParagraph,
+    ]).slice(0, 5);
+  }
 
   return uniqueText([
     shopperDescription,
@@ -474,22 +807,37 @@ export function buildCouponleoStoreMetaDescription(
     return '';
   }
 
-  const activeOfferCount = store.activeCoupons || store.couponCount || 0;
+  const activeOfferCount = storeOfferCount(store);
+  const host = store.websiteHost || extractCouponleoWebsiteHost(store.url, store.name);
+  const narrative = trimSentenceEnding(storePrimaryNarrative(store));
+  const categoryLabel = resolveCouponleoStoreCategoryLabel(store);
   const marketLead = selectedCountry !== 'all'
     ? `for shoppers in ${selectedCountry}`
     : `for ${marketAudienceCopy(store.location)}`;
-  const couponContext = store.category && store.category.toLowerCase() !== 'other'
-    ? `Compare ${store.name} coupon codes, promo codes, and ${categoryCopy(store.category)} deals ${marketLead}`
-    : `Compare ${store.name} coupon codes, promo codes, and live store offers ${marketLead}`;
+  const shortNarrative = narrative && narrative.length <= 110 ? narrative : '';
+  const couponContext = shortNarrative
+    ? shortNarrative
+    : categoryLabel && categoryLabel.toLowerCase() !== 'other'
+      ? `Check ${store.name} coupon codes and ${categoryCopy(categoryLabel)} deals ${marketLead}`
+      : `Check ${store.name} coupon codes and live deals ${marketLead}`;
   const coverage = activeOfferCount > 0
-    ? `with ${countLabel(activeOfferCount, 'live offer', 'live offers')} to review before checkout.`
-    : 'before you decide whether the current deal mix is worth opening.';
+    ? `${countLabel(activeOfferCount, 'live offer', 'live offers')} help you decide whether ${host} deserves the click.`
+    : `Use it to judge whether the store is worth opening before the next stronger offer cycle appears.`;
+
+  const preferredMeta = editorialCandidates([
+    store.metaDescription,
+    store.websiteMetaDescription,
+    store.description,
+  ], 8, 72)[0];
+
+  if (preferredMeta) {
+    return clampMetaDescription(preferredMeta);
+  }
 
   return clampMetaDescription(
     uniqueText([
-      `${couponContext} ${coverage}`.trim(),
-      store.websiteMetaDescription,
-      store.metaDescription,
+      `${ensureSentence(couponContext)} ${coverage}`.trim(),
+      store.websiteDescription,
     ])[0] ?? '',
   );
 }
@@ -505,18 +853,28 @@ export function buildCouponleoCategoryMetaDescription(
   const liveDealCount = context.dealCount || category.couponCount || 0;
   const liveStoreCount = context.storeCount || category.storeCount || 0;
   const marketContext = context.selectedCountry !== 'all'
-    ? `in ${context.selectedCountry}`
-    : 'across live CouponLeo markets';
-  const comparisonContext = `Compare ${category.name} coupon codes, promo offers, and live deals ${marketContext} across ${countLabel(liveStoreCount, 'store', 'stores')} before choosing where to shop.`;
+    ? `for shoppers in ${context.selectedCountry}`
+    : 'across CouponLeo markets';
+  const comparisonContext = String(category.name ?? '').trim().toLowerCase() === 'other'
+    ? `Compare mixed-basket coupon codes and hard-to-classify deals ${marketContext}.`
+    : `Compare today's ${category.name} coupon codes, sale offers, and brand discounts ${marketContext}.`;
   const coverageContext = liveDealCount > 0
-    ? `${countLabel(liveDealCount, 'live deal', 'live deals')} are active right now.`
-    : 'Use the category view to compare stores before new offers shift again.';
+    ? `${countLabel(liveDealCount, 'live deal', 'live deals')} from ${countLabel(liveStoreCount, 'store', 'stores')} show where the stronger options are emerging before you decide where to buy.`
+    : 'Keep the topic in view until a stronger wave of live offers returns.';
+
+  const preferredMeta = editorialCandidates([
+    category.metaDescription,
+    category.description,
+    ...(category.seoParagraphs ?? []),
+  ], 8, 72)[0];
+
+  if (preferredMeta) {
+    return clampMetaDescription(preferredMeta);
+  }
 
   return clampMetaDescription(
     uniqueText([
       `${comparisonContext} ${coverageContext}`.trim(),
-      category.metaDescription,
-      category.description,
     ])[0] ?? '',
   );
 }
@@ -537,24 +895,24 @@ export function buildCouponleoStoreFaqItems(
   const narrative = trimSentenceEnding(storePrimaryNarrative(store));
   const focusSentence = narrative
     ? `${narrative}.`
-    : `${store.name} is most useful when you want a quicker read on ${storeSavingsFocus(store)} before checkout.`;
+    : `${store.name} is easier to judge once you can see today's ${storeSavingsFocus(store)} in one place.`;
 
   return [
     {
       question: `What can shoppers usually expect from ${store.name}?`,
-      answer: `${focusSentence} CouponLeo adds a clearer view of whether the current offer mix is leaning on direct markdowns, coupon codes, or shorter promotional bursts.`,
+      answer: `${focusSentence} It gives you a better read on whether the current savings picture is built around broad markdowns, sharper coupon codes, or just a few headline offers.`,
     },
     {
       question: selectedCountry === 'all'
         ? `Is ${store.name} worth checking before checkout?`
         : `Is ${store.name} worth checking for shoppers in ${selectedCountry}?`,
       answer: activeOfferCount > 0
-        ? `${countLabel(activeOfferCount, 'live offer', 'live offers')} are visible ${marketLabel}, which is enough depth to judge whether ${host} still looks competitive once timing, exclusions, and regional price differences are factored in.`
-        : `${host} can still be worth a look ${marketLabel}, but this page is most valuable when fresh offers are active and you can compare more than one savings angle before clicking through.`,
+        ? `${countLabel(activeOfferCount, 'live offer', 'live offers')} are visible ${marketLabel}, which is usually enough depth to judge whether ${host} still feels competitive once timing, exclusions, and regional price differences are factored in.`
+        : `${host} can still be worth checking ${marketLabel}, but it becomes much more persuasive once fresh offers return and you have more than one savings angle to compare.`,
     },
     {
       question: `How should you use this ${store.name} page before buying?`,
-      answer: `Start here to compare the strongest live codes, sale pricing, and offer examples. If one promotion stands out, open ${host} only after you know whether the merchant is rewarding quick checkout, category-specific baskets, or wider storewide spend.`,
+      answer: `Start by scanning the strongest live codes, sale pricing, and offer examples. If one promotion stands out, open ${host} only after you know whether the merchant is rewarding quick checkout, category-specific baskets, or a broader storewide spend.`,
     },
   ];
 }
@@ -581,7 +939,7 @@ export function buildCouponleoCategoryFaqItems(
     },
     {
       question: `Should shoppers start with ${category.name} or jump straight to one store?`,
-      answer: `Start with ${category.name} when the buying intent is clear but the merchant is not. Move into a store page only after one brand begins to separate itself on pricing style, coupon depth, or the overall strength of the current offer mix.`,
+      answer: `Start with ${category.name} when the buying intent is clear but the merchant is not. Narrow to one brand only after it begins to separate itself on pricing style, coupon depth, or the overall strength of the current offer mix.`,
     },
     {
       question: `Does market selection change ${category.name} deals?`,

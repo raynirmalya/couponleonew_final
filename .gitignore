@@ -26,3 +26,8 @@ ui/.git/
 ui/*.log
 
 extension/.cypress-smoke/
+
+# Server runtime snapshots and backup files
+api/dataservices/data/.emergency-live-snapshot.json
+api/dataservices/data/..emergency-live-snapshot.json.*.tmp
+*.bak*

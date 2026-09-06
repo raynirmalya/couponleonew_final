@@ -18,7 +18,6 @@ const BUILD_DATE = new Date().toISOString().slice(0, 10);
 const CATEGORY_MIN_COUPON_COUNT = 25;
 const CATEGORY_MIN_STORE_COUNT = 5;
 const STORE_SITEMAP_CHUNK_SIZE = 5000;
-const LOCALIZED_STORE_SITEMAP_CHUNK_SIZE = 45000;
 const COUNTRY_FILTERED_DIRECTORY_ROUTES = [
   { pathname: '/categories', changefreq: 'daily', priority: '0.84' },
   { pathname: '/stores', changefreq: 'daily', priority: '0.87' },
@@ -224,14 +223,12 @@ const storeEntries = new Map();
 const localizedStaticEntries = new Map();
 const localizedCountryEntries = new Map();
 const localizedCategoryEntries = new Map();
-const localizedStoreEntries = new Map();
 
 let staticCount = 0;
 let storeCount = 0;
 let categoryCount = 0;
 let countryLandingCount = 0;
 let localizedStaticCount = 0;
-let localizedStoreCount = 0;
 let localizedCategoryCount = 0;
 let localizedCountryLandingCount = 0;
 
@@ -324,15 +321,6 @@ for (const store of stores) {
   })) {
     storeCount += 1;
   }
-
-  for (const locale of NON_DEFAULT_LOCALES) {
-    if (addEntry(localizedStoreEntries, localizedPathname(`/stores/${encodeURIComponent(cleanSlug(store.slug))}`, locale.segment), {
-      changefreq: 'daily',
-      priority: '0.64',
-    })) {
-      localizedStoreCount += 1;
-    }
-  }
 }
 
 const sitemapFiles = [
@@ -344,18 +332,10 @@ const sitemapFiles = [
   { filename: 'locales-categories.xml', entries: [...localizedCategoryEntries.values()] },
 ];
 const storeEntryChunks = chunkEntries([...storeEntries.values()], STORE_SITEMAP_CHUNK_SIZE);
-const localizedStoreEntryChunks = chunkEntries([...localizedStoreEntries.values()], LOCALIZED_STORE_SITEMAP_CHUNK_SIZE);
 
 for (const [index, entries] of storeEntryChunks.entries()) {
   sitemapFiles.push({
     filename: storeEntryChunks.length === 1 ? 'stores.xml' : `stores-${index + 1}.xml`,
-    entries,
-  });
-}
-
-for (const [index, entries] of localizedStoreEntryChunks.entries()) {
-  sitemapFiles.push({
-    filename: localizedStoreEntryChunks.length === 1 ? 'locales-stores.xml' : `locales-stores-${index + 1}.xml`,
     entries,
   });
 }
@@ -395,8 +375,6 @@ console.log(
     `Localized static: ${localizedStaticCount}`,
     `Localized country landings: ${localizedCountryLandingCount}`,
     `Localized categories: ${localizedCategoryCount}`,
-    `Localized stores: ${localizedStoreCount}`,
-    `Localized store files: ${localizedStoreEntryChunks.length}`,
-    `Total URLs: ${staticCount + countryLandingCount + categoryCount + storeCount + localizedStaticCount + localizedCountryLandingCount + localizedCategoryCount + localizedStoreCount}`,
+    `Total URLs: ${staticCount + countryLandingCount + categoryCount + storeCount + localizedStaticCount + localizedCountryLandingCount + localizedCategoryCount}`,
   ].join(' '),
 );

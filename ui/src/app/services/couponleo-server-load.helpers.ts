@@ -8,7 +8,11 @@ import type {
 type QueryParamValue = string | number | boolean | null | undefined;
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
-const SERVER_FETCH_TIMEOUT_MS = 8000;
+const DEFAULT_SERVER_FETCH_TIMEOUT_MS = 15_000;
+const SERVER_LIST_CACHE_TTL_MS = 300_000;
+const SERVER_DETAIL_CACHE_TTL_MS = 900_000;
+const SERVER_PAYLOAD_CACHE_LIMIT = 512;
+const serverPayloadCache = new Map<string, { expiresAt: number; payload: unknown }>();
 
 function firstHeaderValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -32,6 +36,15 @@ function internalCouponleoApiBase(): string | null {
   const host = env['COUPONLEO_API_HOST']?.trim() || '127.0.0.1';
 
   return `${protocol}://${host}:${port}/couponleo/api`;
+}
+
+function serverFetchTimeoutMs(): number {
+  const rawValue = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env?.['COUPONLEO_SERVER_FETCH_TIMEOUT_MS'];
+  const parsedValue = Number(rawValue);
+  return Number.isFinite(parsedValue) && parsedValue >= 3_000
+    ? parsedValue
+    : DEFAULT_SERVER_FETCH_TIMEOUT_MS;
 }
 
 export function getCouponleoRequestUrl(req: PageServerLoad['req']): URL {
@@ -92,11 +105,35 @@ function buildCouponleoApiUrl(
 }
 
 async function fetchCouponleoServerPayload<T>(load: PageServerLoad, url: string): Promise<T> {
+  const cached = serverPayloadCache.get(url);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.payload as T;
+  }
+
+  if (cached) {
+    serverPayloadCache.delete(url);
+  }
+
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), SERVER_FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), serverFetchTimeoutMs());
 
   try {
-    return await load.fetch<T>(url, { signal: controller.signal });
+    const payload = await load.fetch<T>(url, { signal: controller.signal });
+    serverPayloadCache.set(url, {
+      expiresAt: Date.now() + (url.includes('/stores/') || url.includes('/categories/') ? SERVER_DETAIL_CACHE_TTL_MS : SERVER_LIST_CACHE_TTL_MS),
+      payload,
+    });
+
+    if (serverPayloadCache.size > SERVER_PAYLOAD_CACHE_LIMIT) {
+      const now = Date.now();
+      for (const [cacheKey, entry] of serverPayloadCache.entries()) {
+        if (entry.expiresAt <= now) {
+          serverPayloadCache.delete(cacheKey);
+        }
+      }
+    }
+
+    return payload;
   } finally {
     clearTimeout(timeout);
   }

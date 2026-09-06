@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { type PageServerLoad } from '@analogjs/router';
@@ -10,30 +10,33 @@ import {
 import { CouponleoBrandmarkComponent } from '../components/couponleo-brandmark.component';
 import { CouponleoEonIconComponent } from '../components/couponleo-eon-icon.component';
 import { CouponleoFavoriteButtonComponent } from '../components/couponleo-favorite-button.component';
-import { CouponleoPageLoaderComponent } from '../components/couponleo-page-loader.component';
 import {
   CouponleoApiService,
   type CouponleoCategory,
   type CouponleoCoupon,
   type CouponleoLocation,
   type CouponleoStore,
+  type CouponleoStoreAnalytics,
 } from '../services/couponleo-api.service';
 import { createLoadingState, withHydratedRequestState } from '../services/couponleo-request-state.helpers';
 import { createStaticRouteMeta } from '../services/couponleo-route-meta';
 import { CouponleoI18nService } from '../services/couponleo-i18n.service';
 import { couponleoCouponLogoUrl, couponleoStoreLogoUrl } from '../services/couponleo-logo.helpers';
 import { CouponleoSavedService } from '../services/couponleo-saved.service';
+import { CouponleoSeoSyncService } from '../services/couponleo-seo-sync.service';
 import {
   buildCouponleoCategoryCardDescription,
+  type CouponleoSeoFaqItem,
   resolveCouponleoLocationSpotlight,
   buildCouponleoStoreCardDescriptionForMarket,
+  resolveCouponleoStoreCategoryLabel,
 } from '../services/couponleo-seo-copy.helpers';
 import {
+  fetchCouponleoData,
   fetchCouponleoList,
   readCouponleoQueryParam,
 } from '../services/couponleo-server-load.helpers';
 import {
-  buildCategorySummaries,
   buildCategoryRoute,
   buildCountryRouteQuery,
   buildStoreRoute,
@@ -117,13 +120,27 @@ const benefits = [
   { title: 'Fresh Savings', copy: 'Active deals only', icon: discountIconSvg },
 ];
 
+const homeCategoryFetchLimit = 120;
+const homeFeaturedCouponFetchLimit = 48;
+const homeFeaturedStoreFetchLimit = 48;
+const homeLocationFetchLimit = 120;
+
 export const routeMeta = createStaticRouteMeta({
-  title: 'CouponLeo | Verified Coupon Codes, Promo Codes, and Live Deals',
-  description: 'Compare live coupon codes, promo codes, store offers, and category deals by brand, topic, and market before you pay full price.',
+  title: 'CouponLeo | Live Coupon Codes, Promo Codes, and Store Deals',
+  description: 'Compare live coupon codes, promo offers, stores, categories, and market-specific deals before you decide where to shop.',
 });
 
 function emptyListResponse<T>() {
   return { items: [] as T[], total: 0 };
+}
+
+function emptyAnalyticsSummary(): CouponleoStoreAnalytics {
+  return {
+    totalCoupons: 0,
+    totalStores: 0,
+    featuredCoupons: 0,
+    liveMarkets: 0,
+  };
 }
 
 export async function load(pageServerLoad: PageServerLoad) {
@@ -131,34 +148,33 @@ export async function load(pageServerLoad: PageServerLoad) {
   const location = locationFilterForCountry(country);
 
   return {
+    analytics: await fetchCouponleoData<CouponleoStoreAnalytics>(
+      pageServerLoad,
+      '/stores/analytics/summary',
+      emptyAnalyticsSummary(),
+    ),
     categories: await fetchCouponleoList(
       pageServerLoad,
       '/categories',
-      { pageSize: 1000 },
+      { location, pageSize: homeCategoryFetchLimit },
       emptyListResponse<CouponleoCategory>(),
-    ),
-    coupons: await fetchCouponleoList(
-      pageServerLoad,
-      '/coupons',
-      { active: true, location, pageSize: 120 },
-      emptyListResponse<CouponleoCoupon>(),
     ),
     featuredCoupons: await fetchCouponleoList(
       pageServerLoad,
-      '/coupons',
-      { active: true, featured: true, location, pageSize: 120 },
+      '/coupons/featured',
+      { active: true, pageSize: homeFeaturedCouponFetchLimit },
       emptyListResponse<CouponleoCoupon>(),
     ),
     locations: await fetchCouponleoList(
       pageServerLoad,
       '/locations',
-      { pageSize: 120 },
+      { pageSize: homeLocationFetchLimit },
       emptyListResponse<CouponleoLocation>(),
     ),
     stores: await fetchCouponleoList(
       pageServerLoad,
       '/stores',
-      { featured: true, location, pageSize: 120 },
+      { featured: true, location, pageSize: homeFeaturedStoreFetchLimit },
       emptyListResponse<CouponleoStore>(),
     ),
   };
@@ -230,7 +246,6 @@ function joinReadableList(values: string[], fallback: string): string {
     CouponleoBrandmarkComponent,
     CouponleoEonIconComponent,
     CouponleoFavoriteButtonComponent,
-    CouponleoPageLoaderComponent,
   ],
   template: `
     <section class="couponleo-hero">
@@ -358,11 +373,7 @@ function joinReadableList(values: string[], fallback: string): string {
       </div>
     </section>
 
-    @if (isLoading()) {
-      <section class="couponleo-page-section">
-        <app-couponleo-page-loader [cards]="4" [columns]="4" [statsCount]="4"></app-couponleo-page-loader>
-      </section>
-    } @else {
+    @if (featuredDeals().length > 0) {
       <section class="couponleo-page-section">
         <div class="couponleo-section-heading">
           <h2>{{ labels().featuredDeals }}</h2>
@@ -374,68 +385,62 @@ function joinReadableList(values: string[], fallback: string): string {
           >{{ labels().viewAllDeals }}</a>
         </div>
 
-        @if (featuredDeals().length > 0) {
-          <div class="couponleo-deal-grid">
-            @for (deal of featuredDeals(); track deal.id) {
-              <article class="couponleo-deal-card">
-                <div class="couponleo-deal-card__top">
-                  <span class="couponleo-deal-card__brand-group">
-                    <span class="couponleo-deal-card__brand-icon" aria-hidden="true">
-                      <app-couponleo-brandmark
-                        [name]="deal.store"
-                        [src]="deal.logoUrl"
-                        [fallbackSrc]="deal.fallbackLogoUrl"
-                      ></app-couponleo-brandmark>
-                    </span>
-                    <a
-                      class="couponleo-store-name-link couponleo-deal-card__brand"
-                      [routerLink]="localizeRoute(deal.storeRoute)"
-                      [queryParams]="countryRouteQuery()"
-                      data-telemetry-event="home_featured_deal_store_open"
-                      [attr.data-telemetry-label]="deal.store"
-                    >{{ deal.store }}</a>
+        <div class="couponleo-deal-grid">
+          @for (deal of featuredDeals(); track deal.id) {
+            <article class="couponleo-deal-card">
+              <div class="couponleo-deal-card__top">
+                <span class="couponleo-deal-card__brand-group">
+                  <span class="couponleo-deal-card__brand-icon" aria-hidden="true">
+                    <app-couponleo-brandmark
+                      [name]="deal.store"
+                      [src]="deal.logoUrl"
+                      [fallbackSrc]="deal.fallbackLogoUrl"
+                    ></app-couponleo-brandmark>
                   </span>
-                  <span class="couponleo-card-toolbar">
-                    <span class="couponleo-deal-card__flag">{{ labels().verified }}</span>
-                    <app-couponleo-favorite-button
-                      [active]="isSaved(deal.id)"
-                      ariaLabel="Save featured deal"
-                      (toggled)="toggleDealSaved(deal)"
-                    ></app-couponleo-favorite-button>
-                  </span>
-                </div>
-                <h3>{{ deal.title }}</h3>
-                <p>{{ deal.description }}</p>
-                <div class="couponleo-deal-card__actions">
-                  <button
-                    type="button"
-                    class="couponleo-code couponleo-code--masked"
-                    (click)="openCoupon(deal)"
-                    data-telemetry-event="home_featured_deal_code_open"
-                    [attr.data-telemetry-label]="deal.store + ' ' + deal.title"
-                  >
-                    {{ maskCode(deal.code) }}
-                  </button>
-                  <button
-                    type="button"
-                    class="couponleo-button couponleo-button--solid"
-                    (click)="openCoupon(deal)"
-                    data-telemetry-event="home_featured_deal_show_code"
-                    [attr.data-telemetry-label]="deal.store + ' ' + deal.title"
-                  >
-                    {{ labels().showCode }}
-                  </button>
-                </div>
-              </article>
-            }
-          </div>
-        } @else {
-          <div class="couponleo-empty-card">
-            <h3>{{ labels().noFeaturedDeals }}</h3>
-            <p>{{ labels().noFeaturedDealsCopy }}</p>
-          </div>
-        }
+                  <a
+                    class="couponleo-store-name-link couponleo-deal-card__brand"
+                    [routerLink]="localizeRoute(deal.storeRoute)"
+                    [queryParams]="countryRouteQuery()"
+                    data-telemetry-event="home_featured_deal_store_open"
+                    [attr.data-telemetry-label]="deal.store"
+                  >{{ deal.store }}</a>
+                </span>
+                <span class="couponleo-card-toolbar">
+                  <span class="couponleo-deal-card__flag">{{ labels().verified }}</span>
+                  <app-couponleo-favorite-button
+                    [active]="isSaved(deal.id)"
+                    ariaLabel="Save featured deal"
+                    (toggled)="toggleDealSaved(deal)"
+                  ></app-couponleo-favorite-button>
+                </span>
+              </div>
+              <h3>{{ deal.title }}</h3>
+              <p>{{ deal.description }}</p>
+              <div class="couponleo-deal-card__actions">
+                <button
+                  type="button"
+                  class="couponleo-code couponleo-code--masked"
+                  (click)="openCoupon(deal)"
+                  data-telemetry-event="home_featured_deal_code_open"
+                  [attr.data-telemetry-label]="deal.store + ' ' + deal.title"
+                >
+                  {{ maskCode(deal.code) }}
+                </button>
+                <button
+                  type="button"
+                  class="couponleo-button couponleo-button--solid"
+                  (click)="openCoupon(deal)"
+                  data-telemetry-event="home_featured_deal_show_code"
+                  [attr.data-telemetry-label]="deal.store + ' ' + deal.title"
+                >
+                  {{ labels().showCode }}
+                </button>
+              </div>
+            </article>
+          }
+        </div>
       </section>
+    }
 
       <section class="couponleo-page-section">
         <div class="couponleo-section-heading">
@@ -620,7 +625,22 @@ function joinReadableList(values: string[], fallback: string): string {
           <p>{{ editorialCopy().detail }}</p>
         </article>
       </section>
-    }
+
+      <section class="couponleo-page-section">
+        <div class="couponleo-section-heading couponleo-section-heading--stacked">
+          <h2>{{ labels().faqTitle }}</h2>
+          <p>{{ labels().faqIntro }}</p>
+        </div>
+
+        <div class="couponleo-copy-grid couponleo-copy-grid--home">
+          @for (faq of homeFaqs(); track faq.question) {
+            <article class="couponleo-copy-card">
+              <h3>{{ faq.question }}</h3>
+              <p>{{ faq.answer }}</p>
+            </article>
+          }
+        </div>
+      </section>
 
     <app-couponleo-coupon-dialog
       [coupon]="activeCoupon()"
@@ -633,29 +653,29 @@ export default class HomePage {
   protected readonly i18n = inject(CouponleoI18nService);
   private readonly route = inject(ActivatedRoute);
   private readonly savedService = inject(CouponleoSavedService);
+  private readonly seoSync = inject(CouponleoSeoSyncService);
   private readonly initialLoad = this.route.snapshot.data['load'] as Awaited<ReturnType<typeof load>> | undefined;
   private readonly initialCountry = normalizeCountryRouteValue(this.route.snapshot.queryParamMap.get('country'));
   private readonly countryQueryParamMap = this.route.queryParamMap.pipe(
     map((params) => normalizeCountryRouteValue(params.get('country'))),
   );
 
-  private readonly couponsState = toSignal(
+  private readonly analyticsState = toSignal(
     withHydratedRequestState(
-      this.countryQueryParamMap.pipe(startWith(this.initialCountry)),
-      (country) => this.api.listCoupons({
-        active: true,
-        location: locationFilterForCountry(country),
-        pageSize: 120,
-      }),
-      emptyListResponse<CouponleoCoupon>(),
-      () => this.initialLoad?.coupons,
+      of(undefined),
+      () => this.api.getStoreAnalytics().pipe(map((response) => response.data)),
+      emptyAnalyticsSummary(),
+      () => this.initialLoad?.analytics,
     ),
-    { initialValue: createLoadingState(emptyListResponse<CouponleoCoupon>()) },
+    { initialValue: createLoadingState(emptyAnalyticsSummary()) },
   );
   private readonly categoriesState = toSignal(
     withHydratedRequestState(
-      of(undefined),
-      () => this.api.listCategories({ pageSize: 1000 }),
+      this.countryQueryParamMap.pipe(startWith(this.initialCountry)),
+      (country) => this.api.listCategories({
+        location: locationFilterForCountry(country),
+        pageSize: homeCategoryFetchLimit,
+      }),
       emptyListResponse<CouponleoCategory>(),
       () => this.initialLoad?.categories,
     ),
@@ -664,11 +684,9 @@ export default class HomePage {
   private readonly featuredCouponsState = toSignal(
     withHydratedRequestState(
       this.countryQueryParamMap.pipe(startWith(this.initialCountry)),
-      (country) => this.api.listCoupons({
+      () => this.api.listFeaturedCoupons({
         active: true,
-        featured: true,
-        location: locationFilterForCountry(country),
-        pageSize: 120,
+        pageSize: homeFeaturedCouponFetchLimit,
       }),
       emptyListResponse<CouponleoCoupon>(),
       () => this.initialLoad?.featuredCoupons,
@@ -681,7 +699,7 @@ export default class HomePage {
       (country) => this.api.listStores({
         featured: true,
         location: locationFilterForCountry(country),
-        pageSize: 120,
+        pageSize: homeFeaturedStoreFetchLimit,
       }),
       emptyListResponse<CouponleoStore>(),
       () => this.initialLoad?.stores,
@@ -691,7 +709,7 @@ export default class HomePage {
   private readonly locationsState = toSignal(
     withHydratedRequestState(
       of(undefined),
-      () => this.api.listLocations({ pageSize: 120 }),
+      () => this.api.listLocations({ pageSize: homeLocationFetchLimit }),
       emptyListResponse<CouponleoLocation>(),
       () => this.initialLoad?.locations,
     ),
@@ -740,54 +758,31 @@ export default class HomePage {
     liveDeals: this.i18n.phrase('Live Deals'),
     localStores: this.i18n.phrase('Local Stores'),
     featuredCoupons: this.i18n.phrase('Featured Coupons'),
-    homeGuideTitle: this.i18n.phrase('How shoppers use CouponLeo to find better deals'),
-    storeDirectoryTitle: this.i18n.phrase('Brand shortcuts when you already know the store'),
-    categoryHubTitle: this.i18n.phrase('Category routes when you still want options'),
-    marketPagesTitle: this.i18n.phrase('Market views that can change the final price'),
-    seoOverviewTitle: this.i18n.phrase('A smarter way to choose the next click'),
+    homeGuideTitle: this.i18n.phrase('Start where the market feels alive'),
+    storeDirectoryTitle: this.i18n.phrase('When one brand already has your attention'),
+    categoryHubTitle: this.i18n.phrase('When the buy is clear but the winner is not'),
+    marketPagesTitle: this.i18n.phrase('When location can change the final answer'),
+    seoOverviewTitle: this.i18n.phrase('A calmer way to choose the next click'),
+    faqTitle: this.i18n.phrase('Before you open the next tab'),
+    faqIntro: this.i18n.phrase('A few quick questions can save a lot of wandering once the shortlist starts taking shape.'),
   }));
-  protected readonly isLoading = computed(() => (
-    this.couponsState().loading
-    || this.categoriesState().loading
-    || this.featuredCouponsState().loading
-    || this.storesState().loading
-    || this.locationsState().loading
-  ));
-
-  private readonly couponsResponse = computed(() => this.couponsState().data);
+  private readonly analyticsResponse = computed(() => this.analyticsState().data);
   private readonly categoriesResponse = computed(() => this.categoriesState().data);
   private readonly featuredCouponsResponse = computed(() => this.featuredCouponsState().data);
   private readonly storesResponse = computed(() => this.storesState().data);
   private readonly locationsResponse = computed(() => this.locationsState().data);
+  private readonly selectedMarket = computed(() => {
+    const selectedCountry = this.selectedCountry();
+    if (selectedCountry === 'all') {
+      return null;
+    }
 
-  private readonly liveCoupons = computed(() => {
-    const coupons = this.couponsResponse().items;
-    const liveCoupons = coupons.filter((coupon) => isCouponLive(coupon.expiresAt));
-    return liveCoupons.length > 0 ? liveCoupons : coupons;
+    return this.locationsResponse().items.find((location) => matchesCountry(selectedCountry, location.country || location.name)) ?? null;
   });
-
-  private readonly countryCoupons = computed(() => (
-    this.liveCoupons().filter((coupon) => matchesCountry(this.selectedCountry(), coupon.location ?? coupon.primary_location))
-  ));
 
   private readonly countryStores = computed(() => (
     this.storesResponse().items.filter((store) => matchesCountry(this.selectedCountry(), store.location))
   ));
-
-  private readonly countryCategorySummaries = computed(() => (
-    buildCategorySummaries(this.countryCoupons(), this.categoriesResponse().items)
-  ));
-
-  private readonly filteredCountryCoupons = computed(() => {
-    const query = this.searchQuery().trim();
-    return this.countryCoupons().filter((coupon) => matchesHomeQuery([
-      coupon.title,
-      coupon.description,
-      coupon.storeName,
-      coupon.categoryName,
-      coupon.discountText,
-    ], query));
-  });
 
   private readonly filteredCountryStores = computed(() => {
     const query = this.searchQuery().trim();
@@ -795,21 +790,27 @@ export default class HomePage {
       store.name,
       store.headline,
       store.category,
+      resolveCouponleoStoreCategoryLabel(store),
       store.location,
       store.savings,
     ], query));
   });
 
-  private readonly filteredCountryCategorySummaries = computed(() => {
+  private readonly filteredCountryCategories = computed(() => {
     const query = this.searchQuery().trim();
-    return this.countryCategorySummaries().filter((category) => matchesHomeQuery([
+    return this.categoriesResponse().items.filter((category) => matchesHomeQuery([
       category.name,
       category.headline,
+      category.description,
+      category.metaDescription,
     ], query));
   });
 
   private readonly featuredCountryCoupons = computed(() => {
-    const coupons = this.featuredCouponsResponse().items;
+    const coupons = this.featuredCouponsResponse().items.filter((coupon) => matchesCountry(
+      this.selectedCountry(),
+      coupon.location ?? coupon.primary_location,
+    ));
     const liveCoupons = coupons.filter((coupon) => isCouponLive(coupon.expiresAt));
     return liveCoupons.length > 0 ? liveCoupons : coupons;
   });
@@ -826,28 +827,32 @@ export default class HomePage {
   });
 
   private readonly countryCouponTotal = computed(() => {
-    const query = this.searchQuery().trim();
-    return query ? this.filteredCountryCoupons().length : this.couponsResponse().total;
+    if (this.selectedCountry() === 'all') {
+      return this.analyticsResponse().totalCoupons ?? 0;
+    }
+
+    return this.selectedMarket()?.couponCount ?? 0;
   });
 
   private readonly countryStoreTotal = computed(() => {
-    const query = this.searchQuery().trim();
-    return query ? this.filteredCountryStores().length : this.storesResponse().total;
+    if (this.selectedCountry() === 'all') {
+      return this.analyticsResponse().totalStores ?? 0;
+    }
+
+    return this.selectedMarket()?.storeCount ?? this.storesResponse().total;
   });
 
   private readonly marketTotal = computed(() => {
     if (this.selectedCountry() === 'all') {
-      return this.locationsResponse().total || this.locationsResponse().items.length;
+      return this.analyticsResponse().liveMarkets || this.locationsResponse().total || this.locationsResponse().items.length;
     }
 
-    return this.countryCouponTotal() > 0 || this.countryStoreTotal() > 0 ? 1 : 0;
+    return this.selectedMarket() ? 1 : 0;
   });
 
   protected readonly featuredDeals = computed<HomeDealCard[]>(() => {
     const featuredCoupons = this.filteredFeaturedCountryCoupons();
-    const couponsToShow = featuredCoupons.length > 0 ? featuredCoupons : this.filteredCountryCoupons();
-
-    return [...couponsToShow]
+    return [...featuredCoupons]
       .sort((left, right) => right.score - left.score)
       .slice(0, 4)
       .map((coupon) => ({
@@ -865,7 +870,8 @@ export default class HomePage {
   });
 
   protected readonly categories = computed<HomeCategoryCard[]>(() => (
-    this.filteredCountryCategorySummaries()
+    [...this.filteredCountryCategories()]
+      .sort((left, right) => right.couponCount - left.couponCount || left.name.localeCompare(right.name))
       .slice(0, 6)
       .map((category) => {
         const presentation = getCategoryPresentation(category.slug);
@@ -873,11 +879,7 @@ export default class HomePage {
           id: `category-${category.slug}`,
           label: category.name,
           deals: `${this.i18n.formatNumber(category.couponCount)} ${this.i18n.phrase('live deals')}`,
-          summary: buildCouponleoCategoryCardDescription({
-            name: category.name,
-            headline: category.headline,
-            description: category.headline,
-          }),
+          summary: buildCouponleoCategoryCardDescription(category),
           imageSrc: presentation.imageSrc,
           imageAlt: presentation.imageAlt,
           route: this.localizeRoute(buildCategoryRoute(category.slug)),
@@ -897,7 +899,7 @@ export default class HomePage {
         id: `store-${store.slug}`,
         name: store.name,
         description: buildCouponleoStoreCardDescriptionForMarket(store, this.selectedCountry()),
-        category: store.category,
+        category: resolveCouponleoStoreCategoryLabel(store) || store.category,
         location: store.location,
         activeCoupons: store.activeCoupons,
         route: this.localizeRoute(buildStoreRoute(store.slug)),
@@ -909,7 +911,7 @@ export default class HomePage {
     const query = this.searchQuery().trim();
     const featuredCouponTotal = query
       ? this.filteredFeaturedCountryCoupons().length
-      : this.featuredCouponsResponse().total;
+      : this.featuredCountryCoupons().length;
 
     return [
       { value: this.i18n.formatNumber(this.countryCouponTotal()), label: this.labels().liveDeals, icon: ticketIconSvg },
@@ -954,7 +956,7 @@ export default class HomePage {
       topUniqueValues(this.marketLinks().map((market) => market.label)),
       this.i18n.phrase('global markets'),
     );
-    return `${this.i18n.phrase('Shoppers often begin with')} ${categoryText}, ${this.i18n.phrase('then compare names like')} ${storeText}, ${this.i18n.phrase('before checking whether the better version of the deal is showing up in')} ${marketText}.`;
+    return `${this.i18n.phrase('A typical shopping path starts with')} ${categoryText}, ${this.i18n.phrase('moves through merchants such as')} ${storeText}, ${this.i18n.phrase('and then checks whether the strongest version of the deal is showing up in')} ${marketText}.`;
   });
   protected readonly storeLinks = computed<HomeResourceLink[]>(() => (
     this.stores().slice(0, 3).map((store) => {
@@ -1011,25 +1013,54 @@ export default class HomePage {
 
     return {
       intro: this.selectedCountry() === 'all'
-        ? this.i18n.phrase('CouponLeo is strongest when it helps you move from curiosity to confidence: start with a brand you trust, widen the search when a better option may exist, and keep one eye on the market because the best final price is not always the most visible offer.')
-        : `${this.i18n.phrase('This homepage is currently focused on')} ${this.selectedCountry()}, ${this.i18n.phrase('so the discovery flow stays closer to the brands, categories, and savings patterns that matter in that market.')}`,
+        ? this.i18n.phrase('The smartest CouponLeo visits start a little wider: notice where the real discounting pressure is building, then let the strongest names earn your attention.')
+        : `${this.i18n.phrase('This opening view is tuned to')} ${this.selectedCountry()}, ${this.i18n.phrase('so the merchants, shopping themes, and savings patterns stay closer to what shoppers there can actually use.')}`,
       introDetail: this.selectedCountry() === 'all'
-        ? `${liveDealCount} ${this.i18n.phrase('live offers across')} ${liveStoreCount} ${this.i18n.phrase('stores and')} ${marketCount} ${this.i18n.phrase('markets give shoppers a workable shortlist instead of a noisy wall of coupon claims.')}`
-        : this.i18n.phrase('That keeps the homepage useful for real shopping decisions, because you can move from broad discovery into store-level detail without losing the local context behind the offer.'),
-      stores: `${this.i18n.phrase('When you already trust the brand, stores such as')} ${storeText} ${this.i18n.phrase('let you see whether the merchant is leaning on coupon codes, direct markdowns, bundle pricing, or short-run promotions before you head to checkout.')}`,
-      storesDetail: this.i18n.phrase('That matters because the smartest click is rarely the first coupon you see. It is the store whose live offer mix still looks strong once you compare depth, freshness, and the kind of savings that fit your basket.'),
-      categories: `${this.i18n.phrase('When the merchant does not matter yet, categories like')} ${categoryText} ${this.i18n.phrase('make it easier to compare similar products across multiple brands without letting urgency choose for you.')}`,
-      categoriesDetail: this.i18n.phrase('It is a calmer way to shop: start with the buying intent, see which merchants are active, and only click through when one offer mix looks materially better than the rest.'),
+        ? `${liveDealCount} ${this.i18n.phrase('live offers across')} ${liveStoreCount} ${this.i18n.phrase('stores and')} ${marketCount} ${this.i18n.phrase('markets give the homepage enough range to reward the better decision, not just the faster click.')}`
+        : this.i18n.phrase('That keeps the journey practical instead of generic, so discovery can turn into a real buying decision without losing the local context around price, delivery, or offer quality.'),
+      stores: `${this.i18n.phrase('If names like')} ${storeText} ${this.i18n.phrase('are already circling in your head, this is where you check whether the savings feel deep, steady, and worth trusting today.')}`,
+      storesDetail: this.i18n.phrase('That extra pause often separates a single flashy code from a merchant that is quietly discounting with real conviction.'),
+      categories: `${this.i18n.phrase('Shopping themes such as')} ${categoryText} ${this.i18n.phrase('work best when you know what you want but still want the strongest brand to reveal itself naturally.')}`,
+      categoriesDetail: this.i18n.phrase('A wider comparison makes thin couponing obvious and gives genuine price pressure room to stand out.'),
       markets: this.selectedCountry() === 'all'
-        ? `${this.i18n.phrase('Market views such as')} ${marketText} ${this.i18n.phrase('matter because the same brand can promote very differently once shipping costs, local stock, minimum spends, or regional coupon rules enter the picture.')}`
-        : `${this.i18n.phrase('Keeping this view focused on')} ${this.selectedCountry()} ${this.i18n.phrase('makes the homepage more practical because it narrows the journey to the offers, delivery expectations, and checkout rules most likely to matter where you shop.')}`,
+        ? `${this.i18n.phrase('Markets such as')} ${marketText} ${this.i18n.phrase('matter because the very same merchant can look compelling in one country and ordinary in another.')}`
+        : `${this.i18n.phrase('Keeping the homepage focused on')} ${this.selectedCountry()} ${this.i18n.phrase('makes the shortlist more believable because it narrows the field to the offers, delivery expectations, and checkout rules most likely to matter where you shop.')}`,
       marketsDetail: this.selectedCountry() === 'all'
-        ? this.i18n.phrase('Instead of assuming one global version of a deal is enough, market-aware browsing helps you spot when the better coupon, better sale price, or better merchant mix is showing up somewhere else.')
-        : this.i18n.phrase('That smaller lens usually leads to faster decisions, fewer dead-end clicks, and more realistic expectations once you reach the store itself.'),
-      overview: this.i18n.phrase('The goal is simple: help shoppers decide what deserves attention before they start bouncing between tabs, banners, and half-relevant promo pages.'),
-      detail: this.i18n.phrase('Use stores when you already know the brand, categories when you are still weighing options, and markets when geography can change the real value of the deal. That keeps the experience practical: less random clicking, more informed shortlist building, and a clearer path toward the offers that deserve a closer look.'),
+        ? this.i18n.phrase('Shipping thresholds, local exclusions, and region-only promotions can quietly change what a good deal really looks like.')
+        : this.i18n.phrase('That narrower lens usually leads to quicker decisions, fewer dead-end clicks, and a much better feel for what the final checkout experience is likely to be.'),
+      overview: this.i18n.phrase('Better savings decisions usually happen in two calm moves: read the field first, then choose the merchant.'),
+      detail: this.i18n.phrase('Let the homepage show you where the energy is, then move deeper only when a brand, product lane, or market has genuinely earned the next click.'),
     };
   });
+  protected readonly homeFaqs = computed<CouponleoSeoFaqItem[]>(() => {
+    const topStore = this.stores()[0]?.name ?? 'a featured store';
+    const topCategory = this.categories()[0]?.label ?? this.i18n.phrase('popular categories');
+    const topMarket = this.marketLinks()[0]?.label ?? this.i18n.phrase('global markets');
+
+    return [
+      {
+        question: this.i18n.phrase('How should shoppers use the homepage before opening a deal?'),
+        answer: this.selectedCountry() === 'all'
+          ? `${this.i18n.phrase('Start by reading the room. Notice which brands, product lanes, and regions feel genuinely active, then follow the option that keeps looking strong from more than one angle.')}`
+          : `${this.i18n.phrase('Because the homepage is already narrowed to')} ${this.selectedCountry()}, ${this.i18n.phrase('it works best as a fast shortlist builder before you open the offer that still looks strongest in that market.')}`,
+      },
+      {
+        question: this.i18n.phrase('When should shoppers stay broad instead of choosing a brand too early?'),
+        answer: `${this.i18n.phrase('Stay broad when a shopping lane such as')} ${topCategory} ${this.i18n.phrase('is clear but the best merchant still is not. Narrow the field only after a brand such as')} ${topStore} ${this.i18n.phrase('keeps looking strong beyond one headline offer.')}`,
+      },
+      {
+        question: this.i18n.phrase('Why do market filters matter on CouponLeo?'),
+        answer: `${topMarket} ${this.i18n.phrase('matters because delivery rules, exclusions, and local promo pressure can change which merchant deserves the order. The same is true for')} ${topCategory.toLowerCase()}, ${this.i18n.phrase('where the strongest-looking option can shift once checkout conditions become market-specific.')}`,
+      },
+    ];
+  });
+
+  constructor() {
+    effect(() => {
+      const faqs = this.homeFaqs();
+      this.seoSync.setPageFaqs(faqs);
+    });
+  }
 
   protected isSaved(id: string): boolean {
     return this.savedService.has(id);

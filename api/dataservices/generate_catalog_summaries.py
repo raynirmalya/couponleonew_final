@@ -14,8 +14,10 @@ from data.repository import CouponLeoRepository, _write_json_atomically
 SUMMARY_FILES = {
     "stores": "stores-summary.json",
     "featured_stores": "featured-stores.json",
+    "featured_coupons": "featured-coupons-summary.json",
     "categories": "categories-summary.json",
     "locations": "locations-summary.json",
+    "analytics": "analytics-summary.json",
 }
 
 
@@ -28,21 +30,39 @@ def _repository() -> CouponLeoRepository:
     return CouponLeoRepository(data_file)
 
 
-def _build_summaries(repository: CouponLeoRepository, featured_limit: int) -> Dict[str, List[Dict[str, Any]]]:
-    snapshot = repository._load_data_from_mysql()
+def _load_snapshot(repository: CouponLeoRepository) -> Dict[str, List[Dict[str, Any]]]:
+    if repository._db_configured():
+        return repository._load_data_from_mysql()
+    return repository._load_data(force=True)
+
+
+def _build_summaries(repository: CouponLeoRepository, featured_limit: int) -> Dict[str, Any]:
+    snapshot = _load_snapshot(repository)
     stores = deepcopy(snapshot.get("storeDirectory") or snapshot.get("stores") or [])
     featured_stores = deepcopy(stores[: max(1, featured_limit)])
     for item in featured_stores:
         item["featured"] = True
 
+    coupons = deepcopy(snapshot.get("coupons") or [])
+    featured_coupons = [item for item in coupons if item.get("featured")]
     categories = deepcopy(snapshot.get("categories") or [])
     locations = repository._aggregate_location_rows()
+    analytics = {
+        "totalCoupons": len(coupons),
+        "totalStores": len(stores),
+        "featuredCoupons": len(featured_coupons),
+        "liveMarkets": len(locations),
+        "dataSource": "mysql-direct" if repository._db_configured() else "snapshot",
+        "refreshedAt": datetime.now(UTC).isoformat(),
+    }
 
     return {
         "stores": stores,
         "featured_stores": featured_stores,
+        "featured_coupons": featured_coupons,
         "categories": categories,
         "locations": locations,
+        "analytics": analytics,
     }
 
 
@@ -60,7 +80,7 @@ def main() -> None:
     for key, filename in SUMMARY_FILES.items():
         items = summaries[key]
         _write_json_atomically(summary_dir / filename, items)
-        counts[key] = len(items)
+        counts[key] = len(items) if isinstance(items, list) else 1
 
     print(
         json.dumps(

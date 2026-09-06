@@ -63,6 +63,9 @@ interface CategoryHeroStat {
 }
 
 const categoryDirectoryPageSize = 12;
+const categoryDirectoryFetchLimit = 240;
+const categoryDirectoryCouponSampleLimit = 160;
+const categoryDirectoryStoreSampleLimit = 96;
 
 function emptyListResponse<T>() {
   return { items: [] as T[], total: 0 };
@@ -76,19 +79,19 @@ export async function load(pageServerLoad: PageServerLoad) {
     categories: await fetchCouponleoList(
       pageServerLoad,
       '/categories',
-      { pageSize: 1000 },
+      { pageSize: categoryDirectoryFetchLimit },
       emptyListResponse<CouponleoCategory>(),
     ),
     coupons: await fetchCouponleoList(
       pageServerLoad,
       '/coupons',
-      { active: true, location, pageSize: 250 },
+      { active: true, location, pageSize: categoryDirectoryCouponSampleLimit },
       emptyListResponse<CouponleoCoupon>(),
     ),
     stores: await fetchCouponleoList(
       pageServerLoad,
       '/stores',
-      { location, pageSize: 120 },
+      { location, pageSize: categoryDirectoryStoreSampleLimit },
       emptyListResponse<CouponleoStore>(),
     ),
   };
@@ -479,7 +482,7 @@ export default class CategoriesPage {
   private readonly categoriesState = toSignal(
     withHydratedRequestState(
       of(undefined),
-      () => this.api.listCategories({ pageSize: 1000 }),
+      () => this.api.listCategories({ pageSize: categoryDirectoryFetchLimit }),
       emptyListResponse<CouponleoCategory>(),
       () => this.initialLoad?.categories,
     ),
@@ -491,7 +494,7 @@ export default class CategoriesPage {
       (country) => this.api.listCoupons({
         active: true,
         location: locationFilterForCountry(country),
-        pageSize: 250,
+        pageSize: categoryDirectoryCouponSampleLimit,
       }),
       emptyListResponse<CouponleoCoupon>(),
       () => this.initialLoad?.coupons,
@@ -503,7 +506,7 @@ export default class CategoriesPage {
       this.countryQueryParamMap.pipe(startWith(this.initialCountry)),
       (country) => this.api.listStores({
         location: locationFilterForCountry(country),
-        pageSize: 120,
+        pageSize: categoryDirectoryStoreSampleLimit,
       }),
       emptyListResponse<CouponleoStore>(),
       () => this.initialLoad?.stores,

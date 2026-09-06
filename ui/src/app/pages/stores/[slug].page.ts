@@ -1,4 +1,5 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { isPlatformServer } from '@angular/common';
+import { Component, computed, effect, inject, PLATFORM_ID, signal } from '@angular/core';
 import { toObservable, toSignal, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { type PageServerLoad } from '@analogjs/router';
@@ -37,12 +38,11 @@ import {
   buildCouponleoStoreMetaDescription,
   buildCouponleoStoreSeoParagraphs,
   extractCouponleoWebsiteHost,
+  resolveCouponleoStoreCategoryLabel,
   resolveCouponleoStoreDescription,
 } from '../../services/couponleo-seo-copy.helpers';
 import {
   fetchCouponleoData,
-  fetchCouponleoList,
-  readCouponleoQueryParam,
 } from '../../services/couponleo-server-load.helpers';
 import {
   buildCountryRouteQuery,
@@ -107,8 +107,6 @@ function emptyCouponListResponse<T>(): CouponleoListResponse<T> {
 
 export async function load(pageServerLoad: PageServerLoad) {
   const slug = pageServerLoad.params?.['slug'] ?? '';
-  const country = normalizeCountryRouteValue(readCouponleoQueryParam(pageServerLoad, 'country'));
-  const location = locationFilterForCountry(country);
 
   const store = slug
     ? await fetchCouponleoData<CouponleoStore | null>(
@@ -123,14 +121,7 @@ export async function load(pageServerLoad: PageServerLoad) {
   }
 
   return {
-    coupons: slug
-      ? await fetchCouponleoList(
-        pageServerLoad,
-        `/coupons/store/${encodeURIComponent(slug)}`,
-        { active: true, location, page: 1, pageSize: storeDealsPageSize },
-        emptyCouponListResponse<CouponleoCoupon>(),
-      )
-      : emptyCouponListResponse<CouponleoCoupon>(),
+    coupons: undefined as CouponleoListResponse<CouponleoCoupon> | undefined,
     store,
   };
 }
@@ -374,7 +365,7 @@ export async function load(pageServerLoad: PageServerLoad) {
             [itemLabel]="i18n.phrase('store deals')"
             (pageChange)="setDealPage($event)"
           ></app-couponleo-pagination>
-        } @else {
+        } @else if (!dealsLoading() && !deferCouponsOnServer) {
           <div class="couponleo-empty-card">
             <h3>{{ labels().noDeals }}</h3>
             <p>{{ labels().noDealsCopy }}</p>
@@ -735,6 +726,7 @@ export async function load(pageServerLoad: PageServerLoad) {
   `],
 })
 export default class StoreDealsPage {
+  private readonly platformId = inject(PLATFORM_ID);
   private readonly api = inject(CouponleoApiService);
   protected readonly i18n = inject(CouponleoI18nService);
   private readonly route = inject(ActivatedRoute);
@@ -745,6 +737,7 @@ export default class StoreDealsPage {
   private readonly title = inject(Title);
   private readonly initialLoad = this.route.snapshot.data['load'] as Awaited<ReturnType<typeof load>> | undefined;
   private readonly initialCountry = normalizeCountryRouteValue(this.route.snapshot.queryParamMap.get('country'));
+  protected readonly deferCouponsOnServer = isPlatformServer(this.platformId) && this.initialLoad?.coupons === undefined;
 
   private readonly storeSlug$ = this.route.paramMap.pipe(
     map((params) => params.get('slug') ?? ''),
@@ -792,13 +785,15 @@ export default class StoreDealsPage {
       ]),
       ([slug, query, page, country]) => (
         slug
-          ? this.api.listCouponsByStore(slug, {
-            active: true,
-            location: locationFilterForCountry(country),
-            page,
-            pageSize: storeDealsPageSize,
-            q: query.trim() || undefined,
-          })
+          ? (this.deferCouponsOnServer
+            ? of(emptyCouponListResponse<CouponleoCoupon>())
+            : this.api.listCouponsByStore(slug, {
+              active: true,
+              location: locationFilterForCountry(country),
+              page,
+              pageSize: storeDealsPageSize,
+              q: query.trim() || undefined,
+            }))
           : of(emptyCouponListResponse<CouponleoCoupon>())
       ),
       emptyCouponListResponse<CouponleoCoupon>(),
@@ -824,10 +819,13 @@ export default class StoreDealsPage {
     { initialValue: createLoadingState(emptyCouponListResponse<CouponleoCoupon>()) },
   );
 
-  protected readonly isLoading = computed(() => this.storeState().loading || this.couponsState().loading);
+  protected readonly isLoading = computed(() => !this.store() && this.storeState().loading);
+  protected readonly dealsLoading = computed(() => this.couponsState().loading);
   protected readonly store = computed(() => this.storeState().data);
   private readonly couponsResponse = computed(() => this.couponsState().data);
-  protected readonly dealTotal = computed(() => this.couponsResponse().total);
+  protected readonly dealTotal = computed(() => (
+    this.couponsResponse().total || this.store()?.activeCoupons || this.store()?.couponCount || 0
+  ));
   protected readonly dealPageNumber = computed(() => this.couponsResponse().page ?? this.dealPage());
   protected readonly dealPageCount = computed(() => this.couponsResponse().pageCount ?? 1);
   protected readonly storeRoute = computed(() => this.localizeRoute(buildStoreRoute(this.store()?.slug ?? this.storeSlug())));
@@ -860,13 +858,13 @@ export default class StoreDealsPage {
     categoryUnavailable: this.i18n.phrase('Category unavailable'),
     directoryStore: this.i18n.phrase('Directory store'),
     featuredStore: this.i18n.phrase('Featured store'),
-    storeOverview: this.i18n.phrase('Store overview'),
-    officialWebsite: this.i18n.phrase('Official website'),
-    primaryMarket: this.i18n.phrase('Primary market'),
-    merchantType: this.i18n.phrase('Merchant type'),
-    liveDealCoverage: this.i18n.phrase('Live deal coverage'),
+    storeOverview: this.i18n.phrase('Before you shop'),
+    officialWebsite: this.i18n.phrase('Official site'),
+    primaryMarket: this.i18n.phrase('Main market'),
+    merchantType: this.i18n.phrase('Shopping lane'),
+    liveDealCoverage: this.i18n.phrase('Active offers'),
     searchThemes: this.i18n.phrase('Popular search themes'),
-    visitWebsite: this.i18n.phrase('Visit official website'),
+    visitWebsite: this.i18n.phrase('Visit official site'),
   }));
 
   protected readonly storeName = computed(() => this.store()?.name ?? this.i18n.phrase('Store Deals'));
@@ -882,8 +880,13 @@ export default class StoreDealsPage {
     buildCouponleoStoreCardDescriptionForMarket(this.store(), this.selectedCountry())
     || resolveCouponleoStoreDescription(this.store(), this.storeHeadline())
   ));
+  protected readonly storeCategoryLabel = computed(() => (
+    resolveCouponleoStoreCategoryLabel(this.store()) || this.labels().categoryUnavailable
+  ));
   protected readonly storeCategory = computed(() => (
-    this.store()?.category ? `${this.labels().category}: ${this.store()!.category}` : this.labels().categoryUnavailable
+    this.storeCategoryLabel() !== this.labels().categoryUnavailable
+      ? `${this.labels().category}: ${this.storeCategoryLabel()}`
+      : this.labels().categoryUnavailable
   ));
   protected readonly storeFeaturedLabel = computed(() => (
     this.store()?.featured ? this.labels().featuredStore : this.labels().directoryStore
@@ -911,34 +914,34 @@ export default class StoreDealsPage {
   protected readonly storeKeywordHighlights = computed(() => (
     buildCouponleoStoreKeywordHighlightsForMarket(this.store(), this.selectedCountry())
   ));
-  protected readonly storeFaqHeading = computed(() => this.i18n.phrase('Questions shoppers usually ask before visiting this store'));
+  protected readonly storeFaqHeading = computed(() => this.i18n.phrase('What shoppers usually want to know'));
   protected readonly storeFaqIntro = computed(() => (
     this.selectedCountry() === 'all'
-      ? this.i18n.phrase('These answers give a quicker read on whether this merchant is worth your next click.')
-      : `${this.i18n.phrase('These answers help')} ${this.selectedCountry()} ${this.i18n.phrase('shoppers judge whether this merchant deserves a closer checkout look.')}`
+      ? this.i18n.phrase('A quick read before you decide whether this store deserves the visit.')
+      : `${this.i18n.phrase('A quick read for shoppers in')} ${this.selectedCountry()} ${this.i18n.phrase('before deciding whether this merchant deserves a closer look.')}`
   ));
   protected readonly storeSeoFacts = computed<StoreSeoFact[]>(() => [
     {
       label: this.labels().officialWebsite,
       value: this.storeWebsiteHost(),
-      copy: this.i18n.phrase('Open the brand directly once the offer mix here looks worth a closer checkout review.'),
+      copy: this.i18n.phrase('Visit the merchant once the savings picture looks strong enough to justify the click.'),
     },
     {
       label: this.labels().primaryMarket,
       value: this.selectedCountry() === 'all' ? (this.store()?.location ?? 'Global') : this.selectedCountry(),
       copy: this.selectedCountry() === 'all'
-        ? this.i18n.phrase('Useful when delivery rules, pricing, or coupon availability can shift by region.')
-        : this.i18n.phrase('This page is currently narrowed to the live deal mix visible in the selected market.'),
+        ? this.i18n.phrase('Worth watching when shipping rules or local promo exclusions can change the final value.')
+        : this.i18n.phrase('Focused on the live mix currently visible in the selected market.'),
     },
     {
       label: this.labels().merchantType,
-      value: this.store()?.category ?? this.labels().categoryUnavailable,
-      copy: this.i18n.phrase('A quick cue for the shopping intent this merchant usually fits best.'),
+      value: this.storeCategoryLabel(),
+      copy: this.i18n.phrase('A quick cue for the kind of basket this store usually suits best.'),
     },
     {
       label: this.labels().liveDealCoverage,
       value: this.storeActiveDealLabel(),
-      copy: this.i18n.phrase('A fast way to judge whether this page gives you enough active options before you move on.'),
+      copy: this.i18n.phrase('One glance tells you whether today feels deep enough to keep the store in play.'),
     },
   ]);
   protected readonly storeFaqs = computed(() => buildCouponleoStoreFaqItems(this.store(), this.selectedCountry()));
@@ -953,12 +956,12 @@ export default class StoreDealsPage {
   protected readonly heroStats = computed(() => [
     { label: this.labels().liveDeals, value: this.storeActiveDealLabel(), icon: tagIconSvg },
     { label: this.labels().location, value: this.storeLocation(), icon: buildingStoreIconSvg },
-    { label: this.labels().category, value: this.store()?.category ?? 'N/A', icon: shieldIconSvg },
+    { label: this.labels().category, value: this.storeCategoryLabel(), icon: shieldIconSvg },
     { label: this.labels().status, value: this.store()?.featured ? this.labels().featured : this.labels().live, icon: shieldIconSvg },
   ]);
 
   protected readonly deals = computed<StorePageCouponCard[]>(() => (
-    this.couponsResponse().items.map((coupon) => ({
+    this.couponsResponse().items.map((coupon: CouponleoCoupon) => ({
       id: `coupon-${coupon.slug}`,
       title: coupon.title,
       subtitle: coupon.categoryName,
