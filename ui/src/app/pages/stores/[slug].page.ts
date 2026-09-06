@@ -1,8 +1,8 @@
+import { loadStore as load } from '../../services/couponleo-page-loaders';
 import { isPlatformServer } from '@angular/common';
 import { Component, computed, effect, inject, PLATFORM_ID, signal } from '@angular/core';
 import { toObservable, toSignal, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { type PageServerLoad } from '@analogjs/router';
 import { combineLatest, map, of, startWith, debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
 import { injectResponse } from '@analogjs/router/tokens';
 import { Meta, Title } from '@angular/platform-browser';
@@ -41,9 +41,6 @@ import {
   resolveCouponleoStoreCategoryLabel,
   resolveCouponleoStoreDescription,
 } from '../../services/couponleo-seo-copy.helpers';
-import {
-  fetchCouponleoData,
-} from '../../services/couponleo-server-load.helpers';
 import {
   buildCountryRouteQuery,
   buildStoreRoute,
@@ -105,26 +102,7 @@ function emptyCouponListResponse<T>(): CouponleoListResponse<T> {
   };
 }
 
-export async function load(pageServerLoad: PageServerLoad) {
-  const slug = pageServerLoad.params?.['slug'] ?? '';
-
-  const store = slug
-    ? await fetchCouponleoData<CouponleoStore | null>(
-      pageServerLoad,
-      `/stores/${encodeURIComponent(slug)}`,
-      null,
-    )
-    : null;
-
-  if (!store) {
-    pageServerLoad.res.statusCode = 404;
-  }
-
-  return {
-    coupons: undefined as CouponleoListResponse<CouponleoCoupon> | undefined,
-    store,
-  };
-}
+export { loadStore as load } from '../../services/couponleo-page-loaders';
 
 @Component({
   selector: 'app-store-deals-page',
@@ -151,7 +129,7 @@ export async function load(pageServerLoad: PageServerLoad) {
             <div class="couponleo-store-deals-hero__identity-copy">
               <span class="couponleo-eyebrow">{{ storeLocation() }}</span>
               <h1>{{ storeName() }}</h1>
-              <p>{{ storeDescription() }}</p>
+              <p>{{ storeName() }} coupon codes and offers. Check the market, expiry and merchant terms before checkout.</p>
 
               <div class="couponleo-store-deals-hero__meta">
                 <span>{{ storeCategory() }}</span>
@@ -230,6 +208,78 @@ export async function load(pageServerLoad: PageServerLoad) {
       </section>
     } @else {
       <section class="couponleo-page-section">
+        <div class="couponleo-section-heading">
+          <h2>{{ dealsHeading() }}</h2>
+          <span class="couponleo-store-deals-summary">{{ dealsSummary() }}</span>
+        </div>
+
+        @if (deals().length > 0) {
+          <div class="couponleo-deal-grid">
+            @for (deal of deals(); track deal.id) {
+              <article class="couponleo-deal-card">
+                <div class="couponleo-deal-card__top">
+                  <span class="couponleo-deal-card__brand-group">
+                    <span class="couponleo-deal-card__brand-icon" aria-hidden="true">
+                      <app-couponleo-brandmark
+                        [name]="storeName()"
+                        [src]="deal.logoUrl"
+                        [fallbackSrc]="deal.fallbackLogoUrl"
+                      ></app-couponleo-brandmark>
+                    </span>
+                    <span class="couponleo-deal-card__brand">{{ storeName() }}</span>
+                  </span>
+                  <span class="couponleo-card-toolbar">
+                    <span class="couponleo-deal-card__flag">{{ i18n.phrase('Merchant offer') }}</span>
+                    <app-couponleo-favorite-button
+                      [active]="isSaved(deal.id)"
+                      [ariaLabel]="labels().saveStoreDeal"
+                      (toggled)="toggleDealSaved(deal)"
+                    ></app-couponleo-favorite-button>
+                  </span>
+                </div>
+                <h3>{{ deal.offer }}</h3>
+                <p>{{ deal.description }}</p>
+                <span class="couponleo-store-deals-card__meta">{{ deal.title }} | {{ deal.category }}</span>
+                <span class="couponleo-store-deals-card__expires">{{ deal.expires }}</span>
+                <div class="couponleo-deal-card__actions">
+                  <button
+                    type="button"
+                    class="couponleo-code couponleo-code--masked"
+                    (click)="openCoupon(deal)"
+                    data-telemetry-event="store_deal_code_open"
+                    [attr.data-telemetry-label]="storeName() + ' ' + deal.offer"
+                  >
+                    {{ deal.code ? maskCode(deal.code) : i18n.phrase('View offer') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="couponleo-button couponleo-button--solid"
+                    (click)="openCoupon(deal)"
+                    data-telemetry-event="store_deal_show_code"
+                    [attr.data-telemetry-label]="storeName() + ' ' + deal.offer"
+                  >
+                    {{ i18n.phrase(deal.code ? 'Show Code' : 'View offer') }}
+                  </button>
+                </div>
+              </article>
+            }
+          </div>
+
+          <app-couponleo-pagination
+            [page]="dealPageNumber()"
+            [pageCount]="dealPageCount()"
+            [totalItems]="dealTotal()"
+            [itemLabel]="i18n.phrase('store deals')"
+            (pageChange)="setDealPage($event)"
+          ></app-couponleo-pagination>
+        } @else if (!dealsLoading() && !deferCouponsOnServer) {
+          <div class="couponleo-empty-card">
+            <h3>{{ labels().noDeals }}</h3>
+            <p>{{ labels().noDealsCopy }}</p>
+          </div>
+        }
+      </section>
+      <section class="couponleo-page-section">
         <div class="couponleo-copy-card couponleo-store-seo-card">
           <div class="couponleo-store-seo-card__copy">
             <span class="couponleo-store-seo-card__eyebrow">{{ labels().storeOverview }}</span>
@@ -300,78 +350,7 @@ export async function load(pageServerLoad: PageServerLoad) {
         </section>
       }
 
-      <section class="couponleo-page-section">
-        <div class="couponleo-section-heading">
-          <h2>{{ dealsHeading() }}</h2>
-          <span class="couponleo-store-deals-summary">{{ dealsSummary() }}</span>
-        </div>
 
-        @if (deals().length > 0) {
-          <div class="couponleo-deal-grid">
-            @for (deal of deals(); track deal.id) {
-              <article class="couponleo-deal-card">
-                <div class="couponleo-deal-card__top">
-                  <span class="couponleo-deal-card__brand-group">
-                    <span class="couponleo-deal-card__brand-icon" aria-hidden="true">
-                      <app-couponleo-brandmark
-                        [name]="storeName()"
-                        [src]="deal.logoUrl"
-                        [fallbackSrc]="deal.fallbackLogoUrl"
-                      ></app-couponleo-brandmark>
-                    </span>
-                    <span class="couponleo-deal-card__brand">{{ storeName() }}</span>
-                  </span>
-                  <span class="couponleo-card-toolbar">
-                    <span class="couponleo-deal-card__flag">{{ i18n.phrase('Verified') }}</span>
-                    <app-couponleo-favorite-button
-                      [active]="isSaved(deal.id)"
-                      [ariaLabel]="labels().saveStoreDeal"
-                      (toggled)="toggleDealSaved(deal)"
-                    ></app-couponleo-favorite-button>
-                  </span>
-                </div>
-                <h3>{{ deal.offer }}</h3>
-                <p>{{ deal.description }}</p>
-                <span class="couponleo-store-deals-card__meta">{{ deal.title }} | {{ deal.category }}</span>
-                <span class="couponleo-store-deals-card__expires">{{ deal.expires }}</span>
-                <div class="couponleo-deal-card__actions">
-                  <button
-                    type="button"
-                    class="couponleo-code couponleo-code--masked"
-                    (click)="openCoupon(deal)"
-                    data-telemetry-event="store_deal_code_open"
-                    [attr.data-telemetry-label]="storeName() + ' ' + deal.offer"
-                  >
-                    {{ maskCode(deal.code) }}
-                  </button>
-                  <button
-                    type="button"
-                    class="couponleo-button couponleo-button--solid"
-                    (click)="openCoupon(deal)"
-                    data-telemetry-event="store_deal_show_code"
-                    [attr.data-telemetry-label]="storeName() + ' ' + deal.offer"
-                  >
-                    {{ i18n.phrase('Show Code') }}
-                  </button>
-                </div>
-              </article>
-            }
-          </div>
-
-          <app-couponleo-pagination
-            [page]="dealPageNumber()"
-            [pageCount]="dealPageCount()"
-            [totalItems]="dealTotal()"
-            [itemLabel]="i18n.phrase('store deals')"
-            (pageChange)="setDealPage($event)"
-          ></app-couponleo-pagination>
-        } @else if (!dealsLoading() && !deferCouponsOnServer) {
-          <div class="couponleo-empty-card">
-            <h3>{{ labels().noDeals }}</h3>
-            <p>{{ labels().noDealsCopy }}</p>
-          </div>
-        }
-      </section>
     }
 
     <app-couponleo-coupon-dialog
@@ -380,6 +359,10 @@ export async function load(pageServerLoad: PageServerLoad) {
     ></app-couponleo-coupon-dialog>
   `,
   styles: [`
+    :host { display:block; min-width:0; overflow-wrap:anywhere; }
+    .couponleo-deal-card, .couponleo-deal-card__brand-group, .couponleo-code { min-width:0; max-width:100%; overflow-wrap:anywhere; }
+    @media(max-width:600px) { .couponleo-store-deals-hero__stats { display:none; } }
+
     :host {
       display: block;
     }
@@ -766,7 +749,7 @@ export default class StoreDealsPage {
           : of(null)
       ),
       null as CouponleoStore | null,
-      () => this.initialLoad?.store ?? undefined,
+      () => this.initialLoad?.store,
     ),
     { initialValue: createLoadingState<CouponleoStore | null>(null) },
   );
@@ -949,7 +932,7 @@ export default class StoreDealsPage {
   protected readonly dealsHeading = computed(() => `${this.labels().dealsFrom} ${this.storeName()}`);
   protected readonly dealsSummary = computed(() => (
     this.selectedCountry() === 'all'
-      ? `${formatCount(this.dealTotal(), 'current offer', 'current offers')} gathered here for a quicker side-by-side read.`
+      ? `${formatCount(this.dealTotal(), 'current offer', 'current offers')} in the catalog. Check each offerâ€™s terms and expiry before checkout.`
       : `${formatCount(this.dealTotal(), 'current offer', 'current offers')} gathered here for shoppers in ${this.selectedCountry()}.`
   ));
 
@@ -967,6 +950,7 @@ export default class StoreDealsPage {
       subtitle: coupon.categoryName,
       description: coupon.description,
       code: coupon.code,
+      ctaUrl: coupon.ctaUrl,
       route: this.storeRoute(),
       category: coupon.categoryName,
       expires: formatExpiryLabel(coupon.expiresAt),
@@ -1047,6 +1031,7 @@ export default class StoreDealsPage {
       subtitle: `${this.storeName()} | ${deal.category}`,
       description: deal.description,
       code: deal.code,
+      ctaUrl: deal.ctaUrl,
       route: deal.route,
     });
   }

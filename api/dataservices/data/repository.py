@@ -2102,7 +2102,7 @@ class CouponLeoRepository:
                     coupons = [
                         coupon
                         for coupon in (
-                            self._build_coupon_record(raw_coupon, None, location_lookup)
+                            self._build_coupon_record(raw_coupon, store_record, location_lookup)
                             for raw_coupon in raw_coupons
                         )
                         if coupon is not None
@@ -2111,7 +2111,7 @@ class CouponLeoRepository:
             except Exception:
                 pass
 
-        if not prefer_live_store_query and (active is None or active):
+        if not self._db_configured() and (active is None or active):
             try:
                 cached_items = self._cached_live_coupon_results(
                     query=query,
@@ -2181,8 +2181,8 @@ class CouponLeoRepository:
                     FROM coupons
                     WHERE {where_sql}
                     ORDER BY
-                        CASE WHEN LOWER(COALESCE(featured, '')) = 'yes' THEN 1 ELSE 0 END DESC,
-                        rating DESC,
+                        (end_date IS NOT NULL) DESC,
+                        end_date ASC,
                         id DESC
                     LIMIT %s OFFSET %s
                     """,
@@ -2639,12 +2639,7 @@ class CouponLeoRepository:
         if precomputed_store is not None:
             return self._write_direct_cache(cache_key, precomputed_store)
 
-        self._load_data()
-        if self._data_source != "seed":
-            preloaded_store = self.get_item("stores", identifier)
-            if preloaded_store is not None:
-                return self._write_direct_cache(cache_key, self._enrich_store_record(preloaded_store))
-
+        # Direct lookups must not load the complete catalog for an unknown store.
         store_row = self._store_row_by_identifier(identifier)
         if not store_row:
             return None
@@ -3256,7 +3251,7 @@ class CouponLeoRepository:
                     FROM coupons
                     WHERE TRIM(COALESCE(store, '')) NOT IN ('', 'unknown')
                       AND (end_date IS NULL OR end_date >= CURDATE())
-                    ORDER BY rating DESC, id DESC
+                    ORDER BY (end_date IS NOT NULL) DESC, end_date ASC, id DESC
                     """
                 )
                 raw_coupons = cursor.fetchall()
@@ -3419,7 +3414,7 @@ class CouponLeoRepository:
                     WHERE store = %s
                       AND TRIM(COALESCE(store, '')) NOT IN ('', 'unknown')
                       AND (end_date IS NULL OR end_date >= CURDATE())
-                    ORDER BY rating DESC, id DESC
+                    ORDER BY (end_date IS NOT NULL) DESC, end_date ASC, id DESC
                     LIMIT %s OFFSET %s
                     """,
                     (normalized_store_name, int(coupon_limit), max(0, int(offset or 0))),
@@ -3864,7 +3859,7 @@ class CouponLeoRepository:
             "categoryAliases": category_names,
             "categoryAliasSlugs": category_alias_slugs,
             "featured": _lower_text(raw_coupon.get("featured")) == "yes",
-            "verified": True,
+            "verified": False,
             "expiresAt": expires_at,
             "ctaUrl": cta_url,
             "cta_url": cta_url,

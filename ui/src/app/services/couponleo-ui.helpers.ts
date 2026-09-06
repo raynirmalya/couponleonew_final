@@ -1,3 +1,5 @@
+import { normalizeCountryRouteValue, locationFilterForCountry } from './couponleo-country.helpers';
+export { normalizeCountryRouteValue, locationFilterForCountry } from './couponleo-country.helpers';
 import airplaneIconSvg from '@eonui/icons/svg/maps/eon-plane.svg?raw';
 import buildingStoreIconSvg from '@eonui/icons/svg/maps/eon-building-store.svg?raw';
 import dropletIconSvg from '@eonui/icons/svg/design/eon-droplet-heart.svg?raw';
@@ -342,10 +344,7 @@ export function matchesCountry(selectedCountry: string, location: string | undef
   return (location ?? '').trim().toLowerCase() === selectedCountry.trim().toLowerCase();
 }
 
-export function locationFilterForCountry(country: string): string | undefined {
-  const normalizedCountry = normalizeCountryRouteValue(country);
-  return normalizedCountry === 'all' ? undefined : normalizedCountry;
-}
+
 
 export function paginateItems<T>(items: T[], page: number, pageSize: number): T[] {
   const start = (Math.max(page, 1) - 1) * pageSize;
@@ -370,10 +369,7 @@ export function localizeCouponleoRoute(path: string, locale: string): string {
     : path;
 }
 
-export function normalizeCountryRouteValue(value: string | null | undefined): string {
-  const normalizedValue = value?.trim();
-  return normalizedValue ? normalizedValue : 'all';
-}
+
 
 export function buildCountryRouteQuery(country: string): Record<string, string | null> {
   const normalizedCountry = normalizeCountryRouteValue(country);

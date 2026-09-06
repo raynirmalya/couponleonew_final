@@ -21,6 +21,9 @@ const STRUCTURED_DATA_SCRIPT_ID = 'couponleo-structured-data';
 const PUBLIC_SITE_ORIGIN = 'https://couponleo.com';
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
 const CANONICAL_ROUTE_ALIASES: Record<string, string> = {
+  '/home': '/',
+  '/index-2': '/',
+  '/about-us': '/about',
   '/blogs': '/blog',
   '/login': '/sign-in',
   '/saved': '/wishlist',
@@ -125,7 +128,7 @@ export class CouponleoSeoSyncService {
     const canonicalBasePath = CANONICAL_ROUTE_ALIASES[basePathname] ?? basePathname;
 
     currentUrl.pathname = isCouponleoLocalizedPublicPath(canonicalBasePath)
-      ? localizeCouponleoPathname(canonicalBasePath, this.localeService.locale())
+      ? canonicalBasePath
       : canonicalBasePath;
 
     this.normalizeCanonicalQuery(currentUrl, canonicalBasePath);
@@ -215,7 +218,7 @@ export class CouponleoSeoSyncService {
       link.remove();
     }
 
-    for (const locale of this.localeService.localeOptions()) {
+    for (const locale of this.localeService.localeOptions().filter(option => option.value === 'en-US')) {
       const link = this.document.createElement('link');
       link.setAttribute('rel', 'alternate');
       link.setAttribute('hreflang', locale.value.toLowerCase());

@@ -799,7 +799,7 @@ const translationCatalog = {
 } as const satisfies Record<Exclude<CouponleoSupportedLocale, 'en-US'>, Record<string, string>>;
 
 const expiryLabelCatalog = {
-  en: { expires: 'Expires', expired: 'Expired', unavailable: 'Expiry unavailable' },
+  en: { expires: 'Expires', expired: 'Expired', unavailable: 'Expiry not provided — confirm with merchant' },
   de: { expires: 'Läuft ab', expired: 'Abgelaufen', unavailable: 'Ablauf unbekannt' },
   fr: { expires: 'Expire le', expired: 'Expiré le', unavailable: 'Expiration indisponible' },
   es: { expires: 'Vence', expired: 'Vencido', unavailable: 'Sin fecha de vencimiento' },

@@ -1,7 +1,7 @@
+import { loadHome as load } from '../services/couponleo-page-loaders';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { type PageServerLoad } from '@analogjs/router';
 import { map, of, startWith, switchMap } from 'rxjs';
 import {
   CouponleoCouponDialogComponent,
@@ -31,11 +31,6 @@ import {
   buildCouponleoStoreCardDescriptionForMarket,
   resolveCouponleoStoreCategoryLabel,
 } from '../services/couponleo-seo-copy.helpers';
-import {
-  fetchCouponleoData,
-  fetchCouponleoList,
-  readCouponleoQueryParam,
-} from '../services/couponleo-server-load.helpers';
 import {
   buildCategoryRoute,
   buildCountryRouteQuery,
@@ -115,9 +110,9 @@ interface HomeEditorialCopy {
 }
 
 const benefits = [
-  { title: 'Verified Coupons', copy: 'Checked against active offers', icon: shieldIconSvg },
+  { title: 'Coupon offers', copy: 'Check merchant terms before checkout', icon: shieldIconSvg },
   { title: 'Top Stores', copy: 'Trusted brands worth a look', icon: awardIconSvg },
-  { title: 'Fresh Savings', copy: 'Active deals only', icon: discountIconSvg },
+  { title: 'Store savings', copy: 'Availability depends on the merchant', icon: discountIconSvg },
 ];
 
 const homeCategoryFetchLimit = 120;
@@ -143,42 +138,7 @@ function emptyAnalyticsSummary(): CouponleoStoreAnalytics {
   };
 }
 
-export async function load(pageServerLoad: PageServerLoad) {
-  const country = normalizeCountryRouteValue(readCouponleoQueryParam(pageServerLoad, 'country'));
-  const location = locationFilterForCountry(country);
-
-  return {
-    analytics: await fetchCouponleoData<CouponleoStoreAnalytics>(
-      pageServerLoad,
-      '/stores/analytics/summary',
-      emptyAnalyticsSummary(),
-    ),
-    categories: await fetchCouponleoList(
-      pageServerLoad,
-      '/categories',
-      { location, pageSize: homeCategoryFetchLimit },
-      emptyListResponse<CouponleoCategory>(),
-    ),
-    featuredCoupons: await fetchCouponleoList(
-      pageServerLoad,
-      '/coupons/featured',
-      { active: true, pageSize: homeFeaturedCouponFetchLimit },
-      emptyListResponse<CouponleoCoupon>(),
-    ),
-    locations: await fetchCouponleoList(
-      pageServerLoad,
-      '/locations',
-      { pageSize: homeLocationFetchLimit },
-      emptyListResponse<CouponleoLocation>(),
-    ),
-    stores: await fetchCouponleoList(
-      pageServerLoad,
-      '/stores',
-      { featured: true, location, pageSize: homeFeaturedStoreFetchLimit },
-      emptyListResponse<CouponleoStore>(),
-    ),
-  };
-}
+export { loadHome as load } from '../services/couponleo-page-loaders';
 
 function matchesHomeQuery(values: Array<string | undefined>, query: string): boolean {
   if (!query) {
@@ -740,7 +700,7 @@ export default class HomePage {
     browseStoresCta: this.i18n.phrase('Browse stores'),
     featuredDeals: this.i18n.phrase('Featured Deals'),
     viewAllDeals: this.i18n.phrase('View all deals'),
-    verified: this.i18n.phrase('Verified'),
+    verified: this.i18n.phrase('Merchant offer'),
     showCode: this.i18n.phrase('Show Code'),
     shoppingSnapshot: this.i18n.phrase('Today\'s deal snapshot'),
     browseMarkets: this.i18n.phrase('Browse markets'),

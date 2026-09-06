@@ -12,6 +12,7 @@ const DEFAULT_SERVER_FETCH_TIMEOUT_MS = 15_000;
 const SERVER_LIST_CACHE_TTL_MS = 300_000;
 const SERVER_DETAIL_CACHE_TTL_MS = 900_000;
 const SERVER_PAYLOAD_CACHE_LIMIT = 512;
+const serverPayloadInFlight = new Map<string, Promise<unknown>>();
 const serverPayloadCache = new Map<string, { expiresAt: number; payload: unknown }>();
 
 function firstHeaderValue(value: string | string[] | undefined): string | undefined {
@@ -114,6 +115,9 @@ async function fetchCouponleoServerPayload<T>(load: PageServerLoad, url: string)
     serverPayloadCache.delete(url);
   }
 
+  const inFlight = serverPayloadInFlight.get(url);
+  if (inFlight) return inFlight as Promise<T>;
+  const pending = (async () => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), serverFetchTimeoutMs());
 
@@ -133,10 +137,16 @@ async function fetchCouponleoServerPayload<T>(load: PageServerLoad, url: string)
       }
     }
 
+    while (serverPayloadCache.size > SERVER_PAYLOAD_CACHE_LIMIT) {
+      serverPayloadCache.delete(serverPayloadCache.keys().next().value!);
+    }
     return payload;
   } finally {
     clearTimeout(timeout);
   }
+  })();
+  serverPayloadInFlight.set(url, pending);
+  try { return await pending; } finally { serverPayloadInFlight.delete(url); }
 }
 
 export async function fetchCouponleoList<T>(
