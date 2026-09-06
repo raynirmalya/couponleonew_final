@@ -8,10 +8,12 @@ Deployment: install cpleo-api-traffic-fixes.conf as /etc/systemd/system/cpleo-ap
 
 Rollback material is in /root/backups/couponleo-traffic-fix-20260906: the original Git bundle, API source, environment, systemd units, and Nginx files. Environment backups are private and must not be committed. Restore old UI service configuration and original API code/configuration together; test both services before restoring original Nginx upstreams. Do not restore only an old UI against an unverified API.
 
-Validation before deployment: 34 frontend tests, 7 backend regression tests, production build, SSR response checks, preview mobile workflow checks. No production database rows are edited by this release. Merchant checkout validity and eventual search ranking changes require separate evidence.
+Validation before deployment: 37 frontend tests, 7 backend regression tests, production build, SSR response checks, preview mobile workflow checks. No production database rows are edited by this release. Merchant checkout validity and eventual search ranking changes require separate evidence.
 
 The SSR route functions are registered through Analog .server.ts entry points for the English and localized home/store/category routes. Shared loader code has no Angular or SVG dependencies. Missing entity payloads remain successful data responses so Angular can render its existing not-found view and set the HTML response to 404.
 
 Preview mobile checks at 390 x 844: homepage 3 initial-HTML cards; Lenovo 8; women's clothing 11. First card positions: Lenovo 1,649 px (before 5,177), category 1,791 px (before 27,104). All sampled pages had no horizontal overflow or browser errors. Store/category pagination and merchant-offer dialogs worked; the India store filter showed the empty state. These are synthetic observations, not field Core Web Vitals or ranking evidence.
 
 Unknown-store direct lookups query the store table without loading a full catalog. Two backend tests cover missing and precomputed store lookups. The archived UI delta SHA-256 is c9805e75e7947a9e7709f8a599e1baeb5a92fc68a2909d2cb9c91c45df14d777; it overlays the initial verified UI archive in the private release directory.
+
+Final UI release: /srv/couponleo-ui/releases/20260906-query-filters. Its delta SHA-256 is fd6b68a93f370eb52a96d523b872bb81eff73eb39dcb8413a011f6b6b9a3ec40. The server HTTP interceptor preserves country and pagination queries while using loopback API/page-data requests. Public-host checks cover HTTPS behavior. Three regression tests cover query preservation; 37 frontend and 7 backend tests pass.
