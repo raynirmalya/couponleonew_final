@@ -263,7 +263,7 @@ export function formatExpiryLabel(expiresAt: string, now: Date = new Date()): st
     return couponleoExpiryLabels(resolveUiLocale()).unavailable;
   }
 
-  const formattedDate = expiry.toLocaleDateString(resolveUiLocale(), { month: 'short', day: 'numeric' });
+  const formattedDate = expiry.toLocaleDateString(resolveUiLocale(), { month: 'short', day: 'numeric', timeZone: 'UTC' });
   const labels = couponleoExpiryLabels(resolveUiLocale());
   return isCouponLive(expiresAt, now) ? `${labels.expires} ${formattedDate}` : `${labels.expired} ${formattedDate}`;
 }
@@ -411,12 +411,13 @@ function parseDate(value: string): Date | null {
     return null;
   }
 
-  const parsed = new Date(`${value}T00:00:00`);
+  const parsed = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00Z` : value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function startOfDay(value: Date): Date {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  // Match the API day boundary so server HTML and browser labels agree.
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
 }
 
 function buildCategoryPresentation(
