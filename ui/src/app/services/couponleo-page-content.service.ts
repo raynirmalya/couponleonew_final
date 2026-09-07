@@ -180,7 +180,7 @@ function buildCouponCard(coupon: CouponleoCoupon) {
   const expiresInDays = daysUntil(coupon.expiresAt);
   const badge = coupon.code
     ? translateCouponleoPhrase(locale, 'Coupon code')
-    : translateCouponleoPhrase(locale, 'Verified deal');
+    : translateCouponleoPhrase(locale, 'Merchant offer');
 
   return {
     badge,
@@ -564,6 +564,23 @@ export class CouponleoPageContentService {
     layout: 'help',
     sections: [
       {
+        eyebrow: 'Offer information',
+        title: 'Offers and affiliate links',
+        copy: 'CouponLeo brings together merchant and partner feeds, including CouponAPI. A listing in the catalog does not mean that CouponLeo has tested the offer at checkout or that the merchant endorses CouponLeo.',
+        variant: 'list',
+        columns: 2,
+        cards: [
+          { badge: 'Sources', title: 'What an active offer means',
+            copy: 'An active listing reflects the information available in the feed. Codes, sale prices, expiry dates, countries, and restrictions can change. Check eligibility, minimum spend, exclusions, and the final price with the merchant before paying.', tone: 'blue' },
+          { badge: 'Affiliate disclosure', title: 'How CouponLeo may earn money',
+            copy: 'We may earn a commission when you buy through some links on CouponLeo. An affiliate link can send you through a network to the merchant so it can attribute a purchase. Revealing a code does not require you to buy anything.', tone: 'sand' },
+          { badge: 'Shopping help', title: 'When a code does not work',
+            copy: 'Check the offer country, expiry date, product exclusions, account eligibility, and minimum spend. A sale may apply without a code. Compare the total including delivery before completing checkout.', href: '/stores', cta: 'Browse stores', tone: 'navy' },
+          { badge: 'Corrections', title: 'Report an offer or content concern',
+            copy: 'Send the CouponLeo page address, merchant name, and the incorrect offer details through Contact. For a logo, image, or description rights concern, include the affected material and the basis of your request so the team can review it.', href: '/contact', cta: 'Contact CouponLeo', tone: 'orange' },
+        ],
+      },
+      {
         eyebrow: 'Common questions',
         title: 'Start with what you need help with',
         copy: 'These are the most common starting points for shoppers using CouponLeo.',
@@ -802,7 +819,7 @@ export class CouponleoPageContentService {
     description: 'This policy explains how the CouponLeo website and the CouponLeo Companion browser extension handle account sessions, saved items, current-store matching, browser storage, telemetry, and support requests.',
     heroTone: 'soft',
     layout: 'legal',
-    lastUpdated: 'June 23, 2026',
+    lastUpdated: 'September 7, 2026',
     sections: [
       {
         eyebrow: '1. Information we collect',
@@ -834,7 +851,7 @@ export class CouponleoPageContentService {
           {
             badge: 'Telemetry',
             title: 'Usage events and service diagnostics',
-            copy: 'CouponLeo may record product usage events such as page views, popup opens, coupon interactions, notice actions, referrer context, browser language, timezone, and anonymous extension session identifiers to operate features, measure quality, and troubleshoot issues.',
+            copy: 'Website analytics stay off until you choose Allow analytics. If allowed, Google Analytics and CouponLeo usage events measure page views and coupon interactions, with browser, device, language, timezone, and approximate IP-based location. CouponLeo website usage events omit account email addresses and URL query strings. The browser extension has separate telemetry behavior, including popup and notice actions, that this website choice does not control.',
             meta: `${formatCount(this.siteSummary().totalCoupons, 'live offer', 'live offers')} can currently be measured through product usage flows`,
             tone: 'sand',
           },
@@ -843,7 +860,7 @@ export class CouponleoPageContentService {
       {
         eyebrow: '2. How we use and share information',
         title: 'How we use and share information',
-        copy: 'CouponLeo uses collected information to run the website, operate the extension, support account flows, and improve reliability. It is not sold for unrelated advertising or resale use.',
+        copy: 'CouponLeo uses account and preference information to operate the service and optional website analytics to understand usage. Requests to the website and its providers also carry technical information such as your IP address.',
         variant: 'legal',
         cards: [
           {
@@ -866,8 +883,8 @@ export class CouponleoPageContentService {
           },
           {
             badge: 'Sharing',
-            title: 'To communicate with CouponLeo services only as needed',
-            copy: 'Website and extension requests can send relevant data to CouponLeo APIs for store matching, account status, saved-state recovery, and telemetry processing. CouponLeo does not sell this user data to unrelated third parties.',
+            title: 'Website services and external providers',
+            copy: 'Website and extension features communicate with CouponLeo APIs. If you allow website analytics, your browser also contacts Google Analytics and IP-location providers ipapi.co or ipwho.is. Using Google sign-in contacts Google for authentication. Following an affiliate link may share referral information with the affiliate network and merchant under their own privacy policies.',
             tone: 'orange',
           },
         ],
@@ -875,7 +892,7 @@ export class CouponleoPageContentService {
       {
         eyebrow: '3. Your choices',
         title: 'Your choices and updates',
-        copy: 'Users can review settings, clear browser state, remove the extension, or contact the team when they have privacy questions or want changes explained.',
+        copy: 'Choose Allow analytics or Reject analytics in the website privacy notice. You can change your choice using Privacy choices in the footer. Rejecting analytics keeps sign-in, browsing, and saved-item features available. Withdrawal stops further optional website events and clears local CouponLeo analytics identifiers, queued events, location cache, and accessible Google Analytics cookies; it does not delete data already sent. Contact the team for questions about previously collected data.',
         variant: 'legal',
         cards: [
           {

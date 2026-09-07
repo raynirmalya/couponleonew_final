@@ -75,7 +75,7 @@ interface StoreStat {
 }
 
 const heroBenefits = [
-  { title: 'Verified Stores', copy: 'Brands with active deal coverage', icon: shieldCheckIconSvg },
+  { title: 'Featured stores', copy: 'Brands with active deal coverage', icon: shieldCheckIconSvg },
   { title: 'Best Coupons', copy: 'Live coupon counts worth checking', icon: tagIconSvg },
   { title: 'Smart Filters', copy: 'Browse by market, category, or letter', icon: shieldLockIconSvg },
 ];

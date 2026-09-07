@@ -1241,7 +1241,7 @@ export default class BlogPage {
     stores: this.i18n.phrase('Stores'),
     markets: this.i18n.phrase('Markets'),
     liveUpdates: this.i18n.phrase('Live Updates'),
-    featuredNow: this.i18n.phrase('Verified offers highlighted right now'),
+    featuredNow: this.i18n.phrase('Merchant offers highlighted right now'),
     merchantCoverage: this.i18n.phrase('Merchant coverage visible across the public catalog'),
     regionalCoverage: this.i18n.phrase('Country routes shaping regional browsing'),
     storiesTrackCatalog: this.i18n.phrase('Stories now track live source rows stored in the CouponLeo article table.'),

@@ -127,7 +127,7 @@ export const alertsPageConfig: CouponleoThemedPageConfig = {
         },
         {
           title: 'Fresh campaign launches',
-          copy: 'Stay updated when your favorite stores add new verified offers or bonus savings.',
+          copy: 'Stay updated when your favorite stores add new merchant offers or bonus savings.',
           meta: 'A good fit for loyal brand shoppers and weekend sale trackers.',
           tone: 'navy',
         },

@@ -2,7 +2,8 @@ import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { DestroyRef, Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
-import { filter, firstValueFrom } from 'rxjs';
+import { filter, firstValueFrom, takeUntil } from 'rxjs';
+import { CouponleoConsentService } from './couponleo-consent.service';
 import {
   COUPONLEO_LOCALE_STORAGE_KEY,
   COUPONLEO_SESSION_STORAGE_KEY,
@@ -57,6 +58,7 @@ interface CouponleoRouteTelemetryContext {
 @Injectable({ providedIn: 'root' })
 export class CouponleoTelemetryService {
   private readonly api = inject(CouponleoApiService);
+  private readonly consent = inject(CouponleoConsentService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly document = inject(DOCUMENT);
   private readonly platformId = inject(PLATFORM_ID);
@@ -64,6 +66,8 @@ export class CouponleoTelemetryService {
   private readonly browser = isPlatformBrowser(this.platformId);
 
   private started = false;
+  private consentGeneration = 0;
+  private geoController: AbortController | null = null;
   private sending = false;
   private flushTimer: number | null = null;
   private lastPageViewKey = '';
@@ -77,18 +81,40 @@ export class CouponleoTelemetryService {
     }
 
     this.started = true;
-    this.detectedLocation = this.readStoredDetectedLocation();
-    this.restorePersistedQueue();
-    void this.ensureDetectedLocation(true);
     this.registerRouterTracking();
     this.registerDomTracking();
     this.registerLifecycleTracking();
-    window.setTimeout(() => this.trackPageView('initial_load'), 120);
-    this.scheduleFlush(1400);
+    this.consent.changes.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.applyConsent());
+    if (this.consent.ready()) this.applyConsent();
+  }
+
+  private applyConsent(): void {
+    this.consentGeneration += 1;
+    if (this.consent.analyticsAllowed()) {
+      this.detectedLocation = this.readStoredDetectedLocation();
+      this.restorePersistedQueue();
+      void this.ensureDetectedLocation();
+      window.setTimeout(() => this.trackPageView('initial_load'), 120);
+      this.scheduleFlush(1400);
+      return;
+    }
+    this.geoController?.abort();
+    this.detectedLocation = null;
+    this.detectedLocationPromise = null;
+    this.lastPageViewKey = '';
+    this.queue = [];
+    if (this.flushTimer !== null) window.clearTimeout(this.flushTimer);
+    this.flushTimer = null;
+    for (const key of [COUPONLEO_TELEMETRY_GEO_STORAGE_KEY, COUPONLEO_TELEMETRY_QUEUE_STORAGE_KEY,
+      COUPONLEO_TELEMETRY_VISITOR_STORAGE_KEY, COUPONLEO_TELEMETRY_SESSION_STORAGE_KEY]) {
+      try { window.localStorage.removeItem(key); window.sessionStorage.removeItem(key); } catch {
+        // Optional storage may be disabled by the browser.
+      }
+    }
   }
 
   trackStructured(event: Omit<CouponleoTelemetryEventPayload, 'sessionId' | 'visitorId'>): void {
-    if (!this.browser) {
+    if (!this.browser || !this.consent.analyticsAllowed()) {
       return;
     }
 
@@ -104,16 +130,15 @@ export class CouponleoTelemetryService {
       eventType: normalizeText(event.eventType || 'custom', 64),
       eventName: normalizeText(event.eventName || event.eventType || 'custom', 160),
       pagePath: normalizeText(event.pagePath || location.pathname || '/', 512),
-      pageQuery: normalizeText(event.pageQuery ?? searchParams.toString(), 4000),
+      pageQuery: '', // Search strings can contain account details and authentication tokens.
       pageTitle: normalizeText(event.pageTitle || this.document.title, 255),
-      referrerUrl: normalizeText(event.referrerUrl || this.document.referrer, 2048),
-      targetUrl: normalizeText(event.targetUrl, 2048),
-      actionLabel: normalizeText(event.actionLabel, 255),
+      referrerUrl: this.analyticsUrl(event.referrerUrl || this.document.referrer),
+      targetUrl: this.analyticsUrl(event.targetUrl),
+      actionLabel: this.redactText(event.actionLabel, 255),
       elementTag: normalizeText(event.elementTag, 32).toLowerCase(),
       elementRole: normalizeText(event.elementRole, 64).toLowerCase(),
       sessionId: this.readOrCreateStorageValue(COUPONLEO_TELEMETRY_SESSION_STORAGE_KEY, 'sessionStorage'),
       visitorId: this.readOrCreateStorageValue(COUPONLEO_TELEMETRY_VISITOR_STORAGE_KEY, 'localStorage'),
-      userEmail: normalizeText(event.userEmail || session.email, 255),
       authState: normalizeText(event.authState || (session.email ? 'authenticated' : 'anonymous'), 32),
       selectedCountry: locationContext.selectedCountry,
       countryCode: locationContext.countryCode,
@@ -132,7 +157,7 @@ export class CouponleoTelemetryService {
       viewportHeight: event.viewportHeight ?? window.innerHeight,
       userAgent: normalizeText(event.userAgent || window.navigator.userAgent, 1024),
       source: normalizeText(event.source || 'couponleo-ui', 32),
-      metadata: this.normalizeMetadata(event.metadata, routeContext),
+      metadata: this.safeMetadata(this.normalizeMetadata(event.metadata, routeContext)) as CouponleoTelemetryMetadata,
     };
 
     this.queue.push(telemetryEvent);
@@ -250,7 +275,7 @@ export class CouponleoTelemetryService {
   }
 
   private trackPageView(reason: string): void {
-    if (!this.browser) {
+    if (!this.browser || !this.consent.analyticsAllowed()) {
       return;
     }
 
@@ -279,7 +304,7 @@ export class CouponleoTelemetryService {
   }
 
   private async flush(): Promise<void> {
-    if (!this.browser || this.sending || !this.queue.length) {
+    if (!this.browser || !this.consent.analyticsAllowed() || this.sending || !this.queue.length) {
       return;
     }
 
@@ -288,19 +313,24 @@ export class CouponleoTelemetryService {
       this.flushTimer = null;
     }
 
+    const generation = this.consentGeneration;
     if (this.detectedLocationPromise) {
       await this.detectedLocationPromise.catch(() => null);
     }
 
+    if (!this.consent.analyticsAllowed() || generation !== this.consentGeneration || !this.queue.length) return;
     const batch = this.queue.slice(0, FLUSH_BATCH_SIZE);
     this.sending = true;
 
     try {
-      await firstValueFrom(this.api.recordTelemetryEvents(batch));
+      await firstValueFrom(this.api.recordTelemetryEvents(batch).pipe(
+        takeUntil(this.consent.changes.pipe(filter((allowed) => !allowed))),
+      ));
+      if (!this.consent.analyticsAllowed() || generation !== this.consentGeneration) return;
       this.queue = this.queue.slice(batch.length);
       this.persistQueue();
     } catch {
-      this.scheduleFlush(RETRY_DELAY_MS);
+      if (this.consent.analyticsAllowed() && generation === this.consentGeneration) this.scheduleFlush(RETRY_DELAY_MS);
       return;
     } finally {
       this.sending = false;
@@ -312,7 +342,7 @@ export class CouponleoTelemetryService {
   }
 
   private scheduleFlush(delay = FLUSH_DELAY_MS): void {
-    if (!this.browser || this.flushTimer !== null) {
+    if (!this.browser || !this.consent.analyticsAllowed() || this.flushTimer !== null) {
       return;
     }
 
@@ -323,15 +353,17 @@ export class CouponleoTelemetryService {
   }
 
   private persistQueue(): void {
-    if (!this.browser) {
+    if (!this.browser || !this.consent.analyticsAllowed()) {
       return;
     }
 
-    window.localStorage.setItem(COUPONLEO_TELEMETRY_QUEUE_STORAGE_KEY, JSON.stringify(this.queue));
+    try { window.localStorage.setItem(COUPONLEO_TELEMETRY_QUEUE_STORAGE_KEY, JSON.stringify(this.queue)); } catch {
+      // Keep the in-memory queue usable when optional storage is unavailable.
+    }
   }
 
   private restorePersistedQueue(): void {
-    if (!this.browser) {
+    if (!this.browser || !this.consent.analyticsAllowed()) {
       return;
     }
 
@@ -351,15 +383,15 @@ export class CouponleoTelemetryService {
   }
 
   private readStoredLocale(): string {
-    if (!this.browser) {
+    if (!this.browser || !this.consent.analyticsAllowed()) {
       return DEFAULT_LOCALE;
     }
 
-    return normalizeText(window.localStorage.getItem(COUPONLEO_LOCALE_STORAGE_KEY) || DEFAULT_LOCALE, 32) || DEFAULT_LOCALE;
+    try { return normalizeText(window.localStorage.getItem(COUPONLEO_LOCALE_STORAGE_KEY) || DEFAULT_LOCALE, 32) || DEFAULT_LOCALE; } catch { return DEFAULT_LOCALE; }
   }
 
   private readSessionSnapshot(): CouponleoStoredSessionSnapshot {
-    if (!this.browser) {
+    if (!this.browser || !this.consent.analyticsAllowed()) {
       return {};
     }
 
@@ -396,7 +428,7 @@ export class CouponleoTelemetryService {
   }
 
   private readStoredDetectedLocation(): CouponleoDetectedLocation | null {
-    if (!this.browser) {
+    if (!this.browser || !this.consent.analyticsAllowed()) {
       return null;
     }
 
@@ -434,7 +466,7 @@ export class CouponleoTelemetryService {
   }
 
   private async ensureDetectedLocation(forceRefresh = false): Promise<CouponleoDetectedLocation | null> {
-    if (!this.browser) {
+    if (!this.browser || !this.consent.analyticsAllowed()) {
       return null;
     }
 
@@ -446,12 +478,14 @@ export class CouponleoTelemetryService {
       return this.detectedLocationPromise;
     }
 
+    const generation = this.consentGeneration;
     this.detectedLocationPromise = this.lookupDetectedLocation()
       .then((location) => {
+        if (!this.consent.analyticsAllowed() || generation !== this.consentGeneration) return null;
         if (location) {
           const previousLocation = this.detectedLocation;
           this.detectedLocation = location;
-          window.localStorage.setItem(COUPONLEO_TELEMETRY_GEO_STORAGE_KEY, JSON.stringify(location));
+          try { window.localStorage.setItem(COUPONLEO_TELEMETRY_GEO_STORAGE_KEY, JSON.stringify(location)); } catch { /* Optional cache. */ }
           this.backfillQueuedLocation(location, previousLocation);
         }
 
@@ -459,7 +493,7 @@ export class CouponleoTelemetryService {
       })
       .catch(() => null)
       .finally(() => {
-        this.detectedLocationPromise = null;
+        if (generation === this.consentGeneration) this.detectedLocationPromise = null;
       });
 
     return this.detectedLocationPromise;
@@ -471,7 +505,9 @@ export class CouponleoTelemetryService {
       async () => this.lookupIpWhoisLocation(),
     ];
 
+    const generation = this.consentGeneration;
     for (const provider of providers) {
+      if (!this.consent.analyticsAllowed() || generation !== this.consentGeneration) return null;
       try {
         const location = await provider();
         if (location) {
@@ -543,7 +579,9 @@ export class CouponleoTelemetryService {
   }
 
   private async fetchGeoJson(url: string): Promise<unknown> {
+    if (!this.consent.analyticsAllowed()) return null;
     const controller = new AbortController();
+    this.geoController = controller;
     const timeoutId = window.setTimeout(() => controller.abort(), GEO_REQUEST_TIMEOUT_MS);
 
     try {
@@ -565,6 +603,7 @@ export class CouponleoTelemetryService {
       return null;
     } finally {
       window.clearTimeout(timeoutId);
+      if (this.geoController === controller) this.geoController = null;
     }
   }
 
@@ -604,6 +643,7 @@ export class CouponleoTelemetryService {
     storageKey: string,
     storageType: 'localStorage' | 'sessionStorage',
   ): string {
+    try {
     const storage = storageType === 'localStorage' ? window.localStorage : window.sessionStorage;
     const existingValue = normalizeText(storage.getItem(storageKey), 64);
     if (existingValue) {
@@ -613,6 +653,7 @@ export class CouponleoTelemetryService {
     const nextValue = this.createId();
     storage.setItem(storageKey, nextValue);
     return nextValue;
+    } catch { return this.createId(); }
   }
 
   private createId(): string {
@@ -810,6 +851,31 @@ export class CouponleoTelemetryService {
     }
 
     return pathname.startsWith(`${prefix}/`) ? pathname.slice(prefix.length) || '/' : pathname || '/';
+  }
+
+  private redactText(value: unknown, limit = 255): string {
+    return normalizeText(value, limit).replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted]');
+  }
+
+  private analyticsUrl(value: unknown): string {
+    if (!value) return '';
+    try {
+      const url = new URL(String(value), window.location.origin);
+      return /^https?:$/.test(url.protocol) ? this.redactText(`${url.origin}${url.pathname}`, 2048) : '';
+    } catch { return ''; }
+  }
+
+  private safeMetadata(value: unknown, key = '', depth = 0): unknown {
+    if (depth > 6 || /email|password|token|secret|fullName|userName/i.test(key)) return undefined;
+    if (typeof value === 'string') {
+      if (/url|path/i.test(key) || /^https?:\/\//i.test(value)) return this.analyticsUrl(value);
+      return this.redactText(value, 1000);
+    }
+    if (Array.isArray(value)) return value.map((entry) => this.safeMetadata(entry, key, depth + 1));
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([name, entry]) => [name, this.safeMetadata(entry, name, depth + 1)]));
+    }
+    return value;
   }
 
   private normalizeMetadata(

@@ -58,6 +58,9 @@ export interface CouponleoCouponReveal {
           } @else {
             <p>No coupon code is supplied. Check the offer and final price on the merchant website.</p>
           }
+          @if (merchantUrl(item.ctaUrl)) {
+            <p class="couponleo-coupon-dialog__description">We may earn a commission if you buy through this link. Check eligibility and the final price at checkout.</p>
+          }
           <div class="couponleo-coupon-dialog__actions">
             @if (item.code) {
             <button

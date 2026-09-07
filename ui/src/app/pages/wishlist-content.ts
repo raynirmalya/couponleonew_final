@@ -21,7 +21,7 @@ import { localizeCouponleoRoute } from '../services/couponleo-ui.helpers';
 
 export const routeMeta = createStaticRouteMeta({
   title: 'Wishlist | CouponLeo',
-  description: 'Review saved stores, categories, and verified offers inside the CouponLeo wishlist workspace.',
+  description: 'Review saved stores, categories, and merchant offers inside the CouponLeo wishlist workspace.',
   robots: 'noindex,follow',
 });
 
@@ -522,7 +522,7 @@ export default class WishlistPage {
   protected readonly labels = computed(() => ({
     eyebrow: this.i18n.phrase('Wishlist'),
     title: this.i18n.phrase('Keep high-intent stores, categories, and deals organized before checkout starts.'),
-    description: this.i18n.phrase('Wishlist acts as the member holding area for brands, category research, and verified offers worth revisiting. It keeps saved signals tidy, separates discovery from redemption, and gives the rest of the CouponLeo support experience a stable reference point.'),
+    description: this.i18n.phrase('Wishlist acts as the member holding area for brands, category research, and merchant offers worth revisiting. It keeps saved signals tidy, separates discovery from redemption, and gives the rest of the CouponLeo support experience a stable reference point.'),
     wishlistItems: this.i18n.phrase('Wishlist items'),
     favoriteStores: this.i18n.phrase('Favorite Stores'),
     favoriteCategories: this.i18n.phrase('Favorite Categories'),
@@ -536,7 +536,7 @@ export default class WishlistPage {
     signIn: this.i18n.phrase('Sign In'),
     favoriteStoresCopy: this.i18n.phrase('Keep preferred merchants visible so repeat shopping journeys start from the right storefront.'),
     favoriteCategoriesCopy: this.i18n.phrase('Cluster saved buying intents before shoppers drill back into the live catalog.'),
-    favoriteDealsCopy: this.i18n.phrase('Hold verified discounts and coupon codes in one place until the next checkout decision.'),
+    favoriteDealsCopy: this.i18n.phrase('Hold merchant discounts and coupon codes in one place until the next checkout decision.'),
     saved: this.i18n.phrase('saved'),
     openStore: this.i18n.phrase('Open Store'),
     openCategory: this.i18n.phrase('Open Category'),

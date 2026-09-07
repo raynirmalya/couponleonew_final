@@ -64,7 +64,7 @@ export default class CouponleoNotFoundPage {
     storesCta: this.i18n.phrase('Open Stores'),
     dealsBadge: this.i18n.phrase('Deals'),
     dealsTitle: this.i18n.phrase('Explore top live deals'),
-    dealsCopy: this.i18n.phrase('See the freshest deal feed and jump straight into verified offers.'),
+    dealsCopy: this.i18n.phrase('See the freshest deal feed and jump straight into merchant offers.'),
     dealsCta: this.i18n.phrase('Open Top Deals'),
   }));
 

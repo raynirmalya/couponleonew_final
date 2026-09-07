@@ -25,20 +25,20 @@ import userIconSvg from '@eonui/icons/svg/system/eon-user.svg?raw';
 
 const highlights = [
   {
-    title: 'Exclusive coupons & deals',
-    copy: 'Access hand-picked offers and member-only promotions.',
+    title: 'Coupons and deals',
+    copy: 'Browse merchant offers and save the ones you want to revisit.',
     icon: tagIconSvg,
     tone: 'blue',
   },
   {
-    title: 'Verified & trusted',
-    copy: 'All coupons are tested and verified to help you save with confidence.',
+    title: 'Check before you buy',
+    copy: 'Offers come from partner feeds and are not all tested at checkout. Check merchant terms before buying.',
     icon: shieldCheckIconSvg,
     tone: 'orange',
   },
   {
     title: 'Never miss a deal',
-    copy: 'Get alerts on the latest deals, price drops, and exclusive offers.',
+    copy: 'Save alert preferences for your country, wishlist, and language.',
     icon: bellIconSvg,
     tone: 'blue',
   },

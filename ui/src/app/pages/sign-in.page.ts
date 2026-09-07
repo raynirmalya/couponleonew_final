@@ -23,8 +23,8 @@ import shieldLockIconSvg from '@eonui/icons/svg/system/eon-shield-lock.svg?raw';
 
 const trustItems = [
   {
-    title: 'Verified Coupons',
-    copy: 'Hand-picked & trusted',
+    title: 'Merchant coupons',
+    copy: 'Check terms before checkout',
     icon: shieldCheckIconSvg,
     tone: 'blue',
   },

@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { CouponleoNewsletterFormComponent } from './couponleo-newsletter-form.component';
 import { CouponleoI18nService } from '../services/couponleo-i18n.service';
 import { localizeCouponleoRoute } from '../services/couponleo-ui.helpers';
+import { CouponleoConsentService } from '../services/couponleo-consent.service';
 
 interface FooterGroup {
   title: string;
@@ -92,11 +93,13 @@ interface FooterGroup {
 
       <div class="couponleo-footer__bottom">
         <p>&copy; 2026 CouponLeo. {{ copy().rightsReserved }}</p>
+        <button type="button" class="couponleo-button couponleo-button--ghost" (click)="consent.openSettings()">Privacy choices</button>
       </div>
     </footer>
   `,
 })
 export class CouponleoFooterComponent {
+  protected readonly consent = inject(CouponleoConsentService);
   protected readonly i18n = inject(CouponleoI18nService);
   protected readonly localizeRoute = (path: string) => localizeCouponleoRoute(path, this.i18n.locale());
   protected readonly copy = computed(() => ({
