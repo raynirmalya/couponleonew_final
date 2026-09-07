@@ -55,6 +55,12 @@ export default defineConfig(({ mode }) => ({
         routes: [],
       },
       ssr: true,
+      // Build environments may enable DEBUG globally. Production responses must
+      // not accumulate Nitro chunk timings into oversized Server-Timing headers.
+      nitro: {
+        debug: false,
+        timing: false,
+      },
     }),
   ],
   test: {
