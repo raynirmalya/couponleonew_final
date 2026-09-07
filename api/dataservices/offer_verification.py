@@ -85,7 +85,13 @@ def listing_checks(offer, now=None):
     kind = text(offer.get('type'))
     has_code = bool(text(offer.get('code')))
     valid_kind = kind in ('code', 'deal') and (kind != 'code' or has_code)
+    mentioned_codes = re.findall(r'(?:use|with|enter|apply)\s+(?:the\s+)?(?:(?:promo|coupon|discount)\s+)?code\s*:?\s+([A-Z0-9][A-Z0-9_-]{2,})',
+                                 text(offer.get('title')) + ' ' + text(offer.get('description')), flags=re.I)
+    # A feed can misclassify "Use code SAVE10" as a code-free sale.
+    code_mismatch = bool(mentioned_codes) and (not has_code or text(offer.get('code')).casefold() not in {code.casefold() for code in mentioned_codes})
+    valid_kind = valid_kind and not code_mismatch
     add('code', 'pass' if valid_kind else 'fail',
+        'The code field does not match the code described in the offer text.' if code_mismatch else
         'A coupon code is supplied; acceptance at checkout is not established.' if has_code else
         'This is a sale listing with no code to enter.' if valid_kind else 'A code listing is missing its coupon code.')
     try:

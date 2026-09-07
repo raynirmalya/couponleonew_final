@@ -54,6 +54,15 @@ class OfferVerificationTests(unittest.TestCase):
         self.assertEqual(expiry['status'], 'unknown')
         self.assertFalse(result['verified'])
 
+    def test_code_mentioned_in_a_sale_title_must_match_the_code_field(self):
+        for fields in [{'type': 'deal', 'code': '', 'title': 'Use code SAVE10 at checkout.'},
+                       {'code': 'OTHER', 'title': 'Save with code SAVE10.'}]:
+            with self.subTest(fields=fields):
+                result = self.status(dict(self.offer, **fields))
+                self.assertEqual(result['verification']['status'], 'review_needed')
+        result = self.status(dict(self.offer, title='Use code SAVE10 at checkout.'))
+        self.assertNotEqual(result['verification']['status'], 'review_needed')
+
     def test_reviewed_checkout_evidence_grants_scoped_time_limited_status(self):
         self.record()
         result = self.status()
