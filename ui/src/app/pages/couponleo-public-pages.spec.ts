@@ -247,9 +247,12 @@ function createActivatedRouteStub(
 
 function createApiMock(responseDelay = 5): Pick<
   CouponleoApiService,
-  'getCategory' | 'getStore' | 'getStoreAnalytics' | 'listAllStores' | 'listBlogArticles' | 'listCategories' | 'listCoupons' | 'listCouponsByCategory' | 'listCouponsByStore' | 'listFeaturedCoupons' | 'listStores' | 'listLocations'
+  'getCouponVerification' | 'getCategory' | 'getStore' | 'getStoreAnalytics' | 'listAllStores' | 'listBlogArticles' | 'listCategories' | 'listCoupons' | 'listCouponsByCategory' | 'listCouponsByStore' | 'listFeaturedCoupons' | 'listStores' | 'listLocations'
 > {
   return {
+    getCouponVerification: () => of({ data: { schemaVersion: 1, offerFingerprint: '', status: 'unverified',
+      checkedAt: null, validUntil: null, country: '', conditions: '', summary: 'No current checkout test is recorded.',
+      listingCheckedAt: '2026-09-07T00:00:00Z', listingChecks: [] } }),
     getCategory: (identifier: string) => of({
       data: mockCategories.find((category) => category.slug === identifier) ?? mockCategories[0],
     } satisfies CouponleoDataResponse<CouponleoCategory>).pipe(delay(responseDelay)),

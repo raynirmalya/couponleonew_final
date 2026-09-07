@@ -1,3 +1,4 @@
+import { CouponleoOfferVerificationComponent } from '../components/couponleo-offer-verification.component';
 import { loadHome as load } from '../services/couponleo-page-loaders';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -201,6 +202,7 @@ function joinReadableList(values: string[], fallback: string): string {
 @Component({
   selector: 'app-home',
   imports: [
+    CouponleoOfferVerificationComponent,
     RouterLink,
     CouponleoCouponDialogComponent,
     CouponleoBrandmarkComponent,
@@ -366,7 +368,7 @@ function joinReadableList(values: string[], fallback: string): string {
                   >{{ deal.store }}</a>
                 </span>
                 <span class="couponleo-card-toolbar">
-                  <span class="couponleo-deal-card__flag">{{ labels().verified }}</span>
+                  <span class="couponleo-deal-card__flag"><app-couponleo-offer-verification [verification]="deal.verification" /></span>
                   <app-couponleo-favorite-button
                     [active]="isSaved(deal.id)"
                     ariaLabel="Save featured deal"
@@ -821,6 +823,8 @@ export default class HomePage {
         subtitle: coupon.storeName,
         description: coupon.description,
         code: coupon.code,
+        couponId: coupon.id,
+        verification: coupon.verification,
         route: '/top-deals',
         store: coupon.storeName,
         storeRoute: this.localizeRoute(buildStoreRoute(coupon.storeSlug)),
@@ -1060,6 +1064,8 @@ export default class HomePage {
       subtitle: deal.store,
       description: deal.description,
       code: deal.code,
+      couponId: deal.couponId,
+      verification: deal.verification,
       route: deal.route,
     });
   }

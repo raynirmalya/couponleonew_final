@@ -1,3 +1,4 @@
+import { CouponleoOfferVerificationComponent } from '../components/couponleo-offer-verification.component';
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -202,6 +203,7 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
 @Component({
   selector: 'app-top-deals-page',
   imports: [
+    CouponleoOfferVerificationComponent,
     RouterLink,
     CouponleoBreadcrumbsComponent,
     CouponleoCouponDialogComponent,
@@ -328,7 +330,7 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
               <div class="couponleo-pick-card__meta">
                 <span class="couponleo-pick-card__verified">
                   <app-couponleo-eon-icon [svg]="shieldIconSvg"></app-couponleo-eon-icon>
-                  {{ labels().verified }}
+                  <app-couponleo-offer-verification [verification]="pick.verification" />
                 </span>
                 <span>{{ pick.used }}</span>
               </div>
@@ -400,7 +402,7 @@ function matchesDealQuery(coupon: CouponleoCoupon, query: string): boolean {
                     >{{ deal.store }}</a>
                   </span>
                   <span class="couponleo-card-toolbar">
-                    <span class="couponleo-deal-card__flag">{{ labels().verified }}</span>
+                    <span class="couponleo-deal-card__flag"><app-couponleo-offer-verification [verification]="deal.verification" /></span>
                     <app-couponleo-favorite-button
                       [active]="isSaved(deal.id)"
                       [ariaLabel]="labels().saveDeal"
@@ -1161,6 +1163,8 @@ export default class TopDealsPage {
         used: coupon.savingsNote,
         expires: formatExpiryLabel(coupon.expiresAt),
         code: coupon.code,
+        couponId: coupon.id,
+        verification: coupon.verification,
         route: '/top-deals',
         storeRoute: this.localizeRoute(buildStoreRoute(coupon.storeSlug)),
         logoUrl: couponleoCouponLogoUrl(coupon),
@@ -1187,6 +1191,8 @@ export default class TopDealsPage {
       subtitle: coupon.categoryName,
       description: coupon.description,
       code: coupon.code,
+      couponId: coupon.id,
+      verification: coupon.verification,
       route: '/top-deals',
       store: coupon.storeName,
       storeRoute: this.localizeRoute(buildStoreRoute(coupon.storeSlug)),
@@ -1351,6 +1357,8 @@ export default class TopDealsPage {
       subtitle: `${deal.store} | ${deal.subtitle}`,
       description: deal.description,
       code: deal.code,
+      couponId: deal.couponId,
+      verification: deal.verification,
       route: deal.route,
     });
   }

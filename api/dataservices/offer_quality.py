@@ -1,6 +1,7 @@
 """Conservative display checks; original feed/database records remain unchanged."""
 from datetime import datetime, timezone
 import re
+from offer_verification import annotate_offers
 
 def _text(value):
     return re.sub(r"\s+", " ", str(value or "")).strip()
@@ -22,6 +23,7 @@ def prepare_offers(items, now=None):
                     continue
             except ValueError:
                 item["expiresAt"] = None
+                item["expiryIssue"] = "unreadable"
         percentages = [_percentages(item.get(key)) for key in ("title", "description", "discountText")]
         nonempty = [values for values in percentages if values]
         if len(nonempty) > 1 and not set.intersection(*nonempty):
@@ -36,4 +38,4 @@ def prepare_offers(items, now=None):
         # An active feed row is not evidence of a successful checkout test.
         item["verified"] = False
         result.append(item)
-    return result
+    return annotate_offers(result, now=now)

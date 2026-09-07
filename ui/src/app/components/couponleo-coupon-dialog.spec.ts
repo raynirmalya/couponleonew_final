@@ -2,10 +2,11 @@ import { TestBed } from '@angular/core/testing';
 import { CouponleoCouponDialogComponent } from './couponleo-coupon-dialog.component';
 import { CouponleoTelemetryService } from '../services/couponleo-telemetry.service';
 import { provideRouter } from '@angular/router';
+import { CouponleoApiService } from '../services/couponleo-api.service';
 
 describe('Offer dialog', () => {
   async function render(ctaUrl: string) {
-    await TestBed.configureTestingModule({imports:[CouponleoCouponDialogComponent],providers:[provideRouter([]),{provide:CouponleoTelemetryService,useValue:{track:()=>{}}}]}).compileComponents();
+    await TestBed.configureTestingModule({imports:[CouponleoCouponDialogComponent],providers:[provideRouter([]),{provide:CouponleoApiService,useValue:{}},{provide:CouponleoTelemetryService,useValue:{track:()=>{}}}]}).compileComponents();
     const fixture=TestBed.createComponent(CouponleoCouponDialogComponent);
     fixture.componentRef.setInput('coupon',{title:'Sale',subtitle:'Store',description:'Details',code:'',route:'/stores/shop',ctaUrl});
     fixture.detectChanges();return fixture;

@@ -30,6 +30,19 @@ export interface CouponleoCategory {
   storeCount?: number;
 }
 
+export interface CouponleoOfferVerification {
+  schemaVersion: number;
+  offerFingerprint: string;
+  status: 'unverified' | 'review_needed' | 'checkout_passed' | 'checkout_failed' | 'merchant_confirmed' | 'revoked' | 'offer_changed' | 'stale';
+  checkedAt: string | null;
+  validUntil: string | null;
+  country: string;
+  conditions: string;
+  summary: string;
+  listingCheckedAt: string;
+  listingChecks: Array<{ name: string; status: 'pass' | 'fail' | 'unknown'; detail: string }>;
+}
+
 export interface CouponleoCoupon {
   id: number;
   slug: string;
@@ -45,6 +58,7 @@ export interface CouponleoCoupon {
   categoryName: string;
   featured: boolean;
   verified: boolean;
+  verification?: CouponleoOfferVerification;
   expiresAt: string;
   ctaUrl: string;
   savingsNote: string;
@@ -289,6 +303,7 @@ export class CouponleoApiService {
   private readonly publicReadCacheTtlMs = 600_000;
   private readonly detailReadCacheTtlMs = 1_800_000;
   private readonly marketReadCacheTtlMs = 900_000;
+  private readonly couponReadCacheTtlMs = 30_000;
 
   listCategories(params: CouponleoCategoryListParams = {}): Observable<CouponleoListResponse<CouponleoCategory>> {
     const httpParams = this.buildParams(params);
@@ -309,14 +324,14 @@ export class CouponleoApiService {
 
   listCoupons(params: CouponleoCouponListParams = {}): Observable<CouponleoListResponse<CouponleoCoupon>> {
     const httpParams = this.buildParams(params);
-    return this.cachedGet<CouponleoListResponse<CouponleoCoupon>>(`${this.baseUrl}/coupons`, httpParams);
+    return this.cachedGet<CouponleoListResponse<CouponleoCoupon>>(`${this.baseUrl}/coupons`, httpParams, this.couponReadCacheTtlMs);
   }
 
   listFeaturedCoupons(
     params: Pick<CouponleoCouponListParams, 'active' | 'page' | 'pageSize'> = {},
   ): Observable<CouponleoListResponse<CouponleoCoupon>> {
     const httpParams = this.buildParams(params);
-    return this.cachedGet<CouponleoListResponse<CouponleoCoupon>>(`${this.baseUrl}/coupons/featured`, httpParams);
+    return this.cachedGet<CouponleoListResponse<CouponleoCoupon>>(`${this.baseUrl}/coupons/featured`, httpParams, this.couponReadCacheTtlMs);
   }
 
   listCouponsByStore(
@@ -327,7 +342,7 @@ export class CouponleoApiService {
     return this.cachedGet<CouponleoListResponse<CouponleoCoupon>>(
       `${this.baseUrl}/coupons/store/${encodeURIComponent(storeSlug)}`,
       httpParams,
-      params.q ? this.publicReadCacheTtlMs : this.marketReadCacheTtlMs,
+      this.couponReadCacheTtlMs,
     );
   }
 
@@ -348,6 +363,13 @@ export class CouponleoApiService {
       httpParams,
       params.q ? this.publicReadCacheTtlMs : this.marketReadCacheTtlMs,
     );
+  }
+
+  getCouponVerification(identifier: number | string): Observable<CouponleoDataResponse<CouponleoOfferVerification>> {
+    // Refresh when a shopper opens the offer; an old card may precede a revocation.
+    return this.http.get<CouponleoDataResponse<CouponleoOfferVerification>>(
+      `${this.baseUrl}/coupons/${encodeURIComponent(String(identifier))}/verification`,
+    ).pipe(timeout(8000));
   }
 
   listAllStores(

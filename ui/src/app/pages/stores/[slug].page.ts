@@ -1,3 +1,4 @@
+import { CouponleoOfferVerificationComponent } from '../../components/couponleo-offer-verification.component';
 import { loadStore as load } from '../../services/couponleo-page-loaders';
 import { isPlatformServer } from '@angular/common';
 import { Component, computed, effect, inject, PLATFORM_ID, signal } from '@angular/core';
@@ -107,6 +108,7 @@ export { loadStore as load } from '../../services/couponleo-page-loaders';
 @Component({
   selector: 'app-store-deals-page',
   imports: [
+    CouponleoOfferVerificationComponent,
     RouterLink,
     CouponleoBreadcrumbsComponent,
     CouponleoCouponDialogComponent,
@@ -229,7 +231,7 @@ export { loadStore as load } from '../../services/couponleo-page-loaders';
                     <span class="couponleo-deal-card__brand">{{ storeName() }}</span>
                   </span>
                   <span class="couponleo-card-toolbar">
-                    <span class="couponleo-deal-card__flag">{{ i18n.phrase('Merchant offer') }}</span>
+                    <span class="couponleo-deal-card__flag"><app-couponleo-offer-verification [verification]="deal.verification" /></span>
                     <app-couponleo-favorite-button
                       [active]="isSaved(deal.id)"
                       [ariaLabel]="labels().saveStoreDeal"
@@ -950,6 +952,8 @@ export default class StoreDealsPage {
       subtitle: coupon.categoryName,
       description: coupon.description,
       code: coupon.code,
+      couponId: coupon.id,
+      verification: coupon.verification,
       ctaUrl: coupon.ctaUrl,
       route: this.storeRoute(),
       category: coupon.categoryName,
@@ -1031,6 +1035,8 @@ export default class StoreDealsPage {
       subtitle: `${this.storeName()} | ${deal.category}`,
       description: deal.description,
       code: deal.code,
+      couponId: deal.couponId,
+      verification: deal.verification,
       ctaUrl: deal.ctaUrl,
       route: deal.route,
     });

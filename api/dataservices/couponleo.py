@@ -138,6 +138,10 @@ def _client_key() -> str:
 
 def _read_cache_control(path: str) -> str:
     normalized_path = (path or "").rstrip("/")
+    # Evidence can be revoked independently of the catalog. Do not serve a
+    # cached checkout claim after a fresh review has withdrawn it.
+    if normalized_path == f"{Config.API_PREFIX}/coupons" or normalized_path.startswith(f"{Config.API_PREFIX}/coupons/"):
+        return "no-store"
     collection_paths = {
         f"{Config.API_PREFIX}/categories",
         f"{Config.API_PREFIX}/coupons",

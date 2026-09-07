@@ -1,8 +1,10 @@
 import { isPlatformBrowser } from '@angular/common';
-import { Component, HostListener, PLATFORM_ID, inject, input, output, signal } from '@angular/core';
+import { Component, HostListener, PLATFORM_ID, effect, inject, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CouponleoEonIconComponent } from './couponleo-eon-icon.component';
 import { CouponleoTelemetryService } from '../services/couponleo-telemetry.service';
+import { CouponleoApiService, CouponleoOfferVerification } from '../services/couponleo-api.service';
+import { CouponleoOfferVerificationComponent } from './couponleo-offer-verification.component';
 
 import copyIconSvg from '@eonui/icons/svg/office/eon-copy.svg?raw';
 import ticketIconSvg from '@eonui/icons/svg/office/eon-ticket.svg?raw';
@@ -15,11 +17,13 @@ export interface CouponleoCouponReveal {
   code: string;
   route: string;
   ctaUrl?: string;
+  couponId?: number | string;
+  verification?: CouponleoOfferVerification;
 }
 
 @Component({
   selector: 'app-couponleo-coupon-dialog',
-  imports: [RouterLink, CouponleoEonIconComponent],
+  imports: [RouterLink, CouponleoEonIconComponent, CouponleoOfferVerificationComponent],
   template: `
     @if (coupon(); as item) {
       <div class="couponleo-coupon-dialog" (click)="handleBackdropClick($event)">
@@ -48,6 +52,13 @@ export interface CouponleoCouponReveal {
           <h3 id="couponleo-coupon-dialog-title">{{ item.title }}</h3>
           <p class="couponleo-coupon-dialog__subtitle">{{ item.subtitle }}</p>
           <p class="couponleo-coupon-dialog__description">{{ item.description }}</p>
+
+          @if (reviewLoading()) {
+            <p role="status">Checking the latest verification result…</p>
+          } @else {
+            <app-couponleo-offer-verification [verification]="currentReview()" [expanded]="true" />
+          }
+          @if (reviewError()) { <p role="status">Verification could not be refreshed. Check the offer with the merchant.</p> }
 
           @if (item.code) {
           <div class="couponleo-coupon-dialog__ticket">
@@ -245,6 +256,7 @@ export class CouponleoCouponDialogComponent {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly browser = isPlatformBrowser(this.platformId);
   private readonly telemetry = inject(CouponleoTelemetryService);
+  private readonly api = inject(CouponleoApiService);
   private copyResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly coupon = input<CouponleoCouponReveal | null>(null);
@@ -254,6 +266,31 @@ export class CouponleoCouponDialogComponent {
   protected readonly copyIconSvg = copyIconSvg;
   protected readonly ticketIconSvg = ticketIconSvg;
   protected readonly copied = signal(false);
+  protected readonly currentReview = signal<CouponleoOfferVerification | undefined>(undefined);
+  protected readonly reviewLoading = signal(false);
+  protected readonly reviewError = signal(false);
+
+  constructor() {
+    effect((onCleanup) => {
+      const item = this.coupon();
+      this.currentReview.set(undefined);
+      this.reviewError.set(false);
+      this.reviewLoading.set(false);
+      if (!this.browser || !item?.couponId) return;
+      this.reviewLoading.set(true);
+      const subscription = this.api.getCouponVerification(item.couponId).subscribe({
+        next: ({ data }) => {
+          this.currentReview.set(item.verification?.offerFingerprint === data.offerFingerprint ? data : {
+            ...data, status: 'offer_changed', validUntil: null,
+            summary: 'The offer has changed. Reload the store page to get its current details.',
+          });
+          this.reviewLoading.set(false);
+        },
+        error: () => { this.reviewLoading.set(false); this.reviewError.set(true); },
+      });
+      onCleanup(() => subscription.unsubscribe());
+    });
+  }
 
   protected merchantUrl(value?: string): string | null {
     try { const url = new URL(value || ''); return ['http:', 'https:'].includes(url.protocol) ? url.href : null; }

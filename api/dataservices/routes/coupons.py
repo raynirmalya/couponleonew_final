@@ -4,6 +4,7 @@ from flask import Blueprint, abort, jsonify, request
 
 from data.repository import repository
 from offer_quality import prepare_offers
+from offer_verification import annotate_offers
 from routes.listing_utils import list_response, parse_bool_arg, parse_limit_arg, parse_page_arg
 
 coupons_bp = Blueprint("coupons", __name__)
@@ -84,7 +85,20 @@ def get_coupon(identifier: str):
     item = repository.get_coupon_live(identifier)
     if item is None:
         abort(404, description="Coupon not found.")
-    return jsonify({"data": item})
+    prepared = prepare_offers([item])
+    return jsonify({"data": prepared[0] if prepared else annotate_offers([item])[0]})
+
+
+@coupons_bp.get("/<identifier>/verification")
+def get_coupon_verification(identifier: str):
+    item = repository.get_coupon_live(identifier)
+    if item is None:
+        abort(404, description="Coupon not found.")
+    prepared = prepare_offers([item])
+    verified = prepared[0] if prepared else annotate_offers([item])[0]
+    response = jsonify({"data": verified["verification"]})
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @coupons_bp.post("")
