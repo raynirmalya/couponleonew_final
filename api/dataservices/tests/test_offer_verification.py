@@ -62,6 +62,8 @@ class OfferVerificationTests(unittest.TestCase):
                 self.assertEqual(result['verification']['status'], 'review_needed')
         result = self.status(dict(self.offer, title='Use code SAVE10 at checkout.'))
         self.assertNotEqual(result['verification']['status'], 'review_needed')
+        generic = self.status(dict(self.offer, title='Use code for 10% savings.'))
+        self.assertNotEqual(generic['verification']['status'], 'review_needed')
 
     def test_reviewed_checkout_evidence_grants_scoped_time_limited_status(self):
         self.record()
@@ -163,6 +165,13 @@ class OfferVerificationTests(unittest.TestCase):
             self.assertEqual(self.store.database.stat().st_mode & 0o777, 0o600)
             artifact = next((self.store.database.parent / 'evidence').iterdir())
             self.assertEqual(artifact.stat().st_mode & 0o777, 0o600)
+
+    def test_evidence_cannot_consume_the_servers_last_reserved_disk_space(self):
+        from types import SimpleNamespace
+        with patch('offer_verification.shutil.disk_usage', return_value=SimpleNamespace(free=1024)):
+            with self.assertRaisesRegex(ValueError, 'storage is low'):
+                self.record()
+        self.assertFalse(self.store.database.exists())
 
 
 if __name__ == '__main__': unittest.main()

@@ -14,6 +14,7 @@ import logging
 import os
 from pathlib import Path
 import re
+import shutil
 import sqlite3
 from urllib.parse import urlsplit
 
@@ -21,6 +22,7 @@ UTC = timezone.utc
 CHECKOUT_VALIDITY = timedelta(hours=24)
 MERCHANT_VALIDITY = timedelta(days=7)
 MAX_EVIDENCE_BYTES = 5 * 1024 * 1024
+MIN_FREE_STORAGE_BYTES = 128 * 1024 * 1024
 FINGERPRINT_FIELDS = ('id', 'storeId', 'storeSlug', 'title', 'description', 'code',
                       'discountText', 'type', 'expiresAt', 'ctaUrl', 'location',
                       'primary_location', 'locations', 'expiryIssue')
@@ -85,12 +87,16 @@ def listing_checks(offer, now=None):
     kind = text(offer.get('type'))
     has_code = bool(text(offer.get('code')))
     valid_kind = kind in ('code', 'deal') and (kind != 'code' or has_code)
-    mentioned_codes = re.findall(r'(?:use|with|enter|apply)\s+(?:the\s+)?(?:(?:promo|coupon|discount)\s+)?code\s*:?\s+([A-Z0-9][A-Z0-9_-]{2,})',
-                                 text(offer.get('title')) + ' ' + text(offer.get('description')), flags=re.I)
+    instruction = r'(?:use|with|enter|apply)\s+(?:the\s+)?(?:(?:promo|coupon|discount)\s+)?code\b'
+    offer_text = text(offer.get('title')) + ' ' + text(offer.get('description'))
+    mentioned_codes = re.findall(instruction + r'\s*:?\s+([A-Z0-9][A-Z0-9_-]{2,})', offer_text, flags=re.I)
+    mentioned_codes = [code for code in mentioned_codes if code.casefold() not in {'for', 'the', 'your', 'our', 'and', 'any', 'below', 'above', 'shown', 'provided', 'checkout'}]
     # A feed can misclassify "Use code SAVE10" as a code-free sale.
-    code_mismatch = bool(mentioned_codes) and (not has_code or text(offer.get('code')).casefold() not in {code.casefold() for code in mentioned_codes})
+    missing_described_code = bool(re.search(instruction, offer_text, flags=re.I)) and not has_code
+    code_mismatch = missing_described_code or (bool(mentioned_codes) and text(offer.get('code')).casefold() not in {code.casefold() for code in mentioned_codes})
     valid_kind = valid_kind and not code_mismatch
     add('code', 'pass' if valid_kind else 'fail',
+        'The offer describes a coupon code, but its code field is empty.' if missing_described_code else
         'The code field does not match the code described in the offer text.' if code_mismatch else
         'A coupon code is supplied; acceptance at checkout is not established.' if has_code else
         'This is a sale listing with no code to enter.' if valid_kind else 'A code listing is missing its coupon code.')
@@ -220,6 +226,12 @@ class VerificationStore:
                 raise ValueError('Evidence must be a nonempty file no larger than 5 MiB.')
             payload = path.read_bytes()
             evidence_hash = hashlib.sha256(payload).hexdigest()
+        if status in ('checkout_passed', 'merchant_confirmed'):
+            storage_root = self.database.parent.resolve()
+            while not storage_root.exists():
+                storage_root = storage_root.parent
+            if shutil.disk_usage(storage_root).free < MIN_FREE_STORAGE_BYTES + len(payload):
+                raise ValueError('Evidence storage is low; no successful review was written. Free space before retrying.')
         self.initialize()
         if evidence_hash:
             directory = self.database.parent / 'evidence'

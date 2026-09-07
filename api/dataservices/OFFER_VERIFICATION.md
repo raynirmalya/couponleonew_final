@@ -18,6 +18,8 @@ The default database is `/var/lib/couponleo-verification/reviews.sqlite3`, confi
 
 Only a trusted operator with SSH/filesystem access can record results. No public verification write endpoint is exposed. Reviews are append-only, with private reviewer identity, timestamps and a SHA-256 fingerprint of the offer and evidence. Public responses omit reviewer identity, notes, artifact paths and cart details. Existing records can be withdrawn with a new revocation; do not delete history to hide a failed test.
 
+Successful evidence writes reserve at least 128 MiB of free filesystem space. If that reserve would be crossed, recording is rejected before writing. Failure and revocation records remain available without adding a new evidence artifact. Storage capacity and backups still need to be managed as review volume grows.
+
 On the server:
 
 ```sh
