@@ -1,9 +1,10 @@
-import { Component, computed, effect, inject } from '@angular/core';
+import { isPlatformServer } from '@angular/common';
+import { Component, computed, effect, inject, makeStateKey, PLATFORM_ID, TransferState } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Meta, Title } from '@angular/platform-browser';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { injectResponse } from '@analogjs/router/tokens';
-import { catchError, combineLatest, distinctUntilChanged, map, of, shareReplay, startWith, switchMap } from 'rxjs';
+import { catchError, combineLatest, distinctUntilChanged, map, of, shareReplay, startWith, switchMap, tap } from 'rxjs';
 
 import {
   COUPONLEO_COUNTRY_PAGE_MIN_COUPONS,
@@ -36,6 +37,7 @@ interface GroupingState { data: CouponleoSeoGroupings; loading: boolean; error: 
 interface CouponState { data: CouponleoCountryHighlights; loading: boolean; error: boolean }
 const emptyGroupings: CouponleoSeoGroupings = { countries: [], groups: [] };
 const emptyCoupons: CouponleoCountryHighlights = { items: [], total: 0 };
+const groupingsStateKey = makeStateKey<CouponleoSeoGroupings>('couponleo-seo-groupings');
 
 @Component({
   selector: 'app-couponleo-country-category-page',
@@ -146,13 +148,25 @@ export default class CouponleoCountryCategoryPage {
   private readonly meta = inject(Meta);
   private readonly title = inject(Title);
   private readonly response = injectResponse();
+  private readonly platformId = inject(PLATFORM_ID);
+  private readonly transferState = inject(TransferState);
+  private readonly hydratedGroupings = this.transferState.hasKey(groupingsStateKey)
+    ? this.transferState.get(groupingsStateKey, emptyGroupings)
+    : null;
   private readonly key$ = this.route.paramMap.pipe(
     map((params) => ({ country: params.get('country') ?? '', category: params.get('category') ?? '' })),
     distinctUntilChanged((a, b) => a.country === b.country && a.category === b.category),
   );
   private readonly groupings$ = this.api.listSeoGroupings().pipe(
     map((data) => ({ data, loading: false, error: false } satisfies GroupingState)),
-    startWith({ data: emptyGroupings, loading: true, error: false } satisfies GroupingState),
+    startWith(this.hydratedGroupings
+      ? { data: this.hydratedGroupings, loading: false, error: false } satisfies GroupingState
+      : { data: emptyGroupings, loading: true, error: false } satisfies GroupingState),
+    tap((state) => {
+      if (isPlatformServer(this.platformId) && !state.loading && !state.error) {
+        this.transferState.set(groupingsStateKey, state.data);
+      }
+    }),
     catchError(() => of({ data: emptyGroupings, loading: false, error: true } satisfies GroupingState)),
     shareReplay({ bufferSize: 1, refCount: true }),
   );
@@ -176,9 +190,20 @@ export default class CouponleoCountryCategoryPage {
       }
       const market = findCouponleoCountryPage(key.country);
       if (!market) return of({ data: emptyCoupons, loading: false, error: false } satisfies CouponState);
+      const highlightsStateKey = makeStateKey<CouponleoCountryHighlights>(`couponleo-seo-highlights:${key.country}:${key.category}`);
+      const hydratedHighlights = this.transferState.hasKey(highlightsStateKey)
+        ? this.transferState.get(highlightsStateKey, emptyCoupons)
+        : null;
       return this.api.listCountryCouponHighlights(market.slug, key.category).pipe(
         map((data) => ({ data, loading: false, error: false } satisfies CouponState)),
-        startWith({ data: emptyCoupons, loading: true, error: false } satisfies CouponState),
+        startWith(hydratedHighlights
+          ? { data: hydratedHighlights, loading: false, error: false } satisfies CouponState
+          : { data: emptyCoupons, loading: true, error: false } satisfies CouponState),
+        tap((state) => {
+          if (isPlatformServer(this.platformId) && !state.loading && !state.error) {
+            this.transferState.set(highlightsStateKey, state.data);
+          }
+        }),
         catchError(() => of({ data: emptyCoupons, loading: false, error: true } satisfies CouponState)),
       );
     }),

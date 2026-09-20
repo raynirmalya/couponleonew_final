@@ -15,6 +15,14 @@ export function couponleoInternalReadUrl(url: string, apiPort: string, uiPort: s
 // Native server requests preserve the complete market/pagination query.
 export const couponleoRequestContextInterceptor: HttpInterceptorFn = (request, next) => {
   if (isPlatformServer(inject(PLATFORM_ID)) && request.method === 'GET') {
+    const parsed = new URL(request.urlWithParams, 'https://couponleo.com');
+    if (parsed.pathname.startsWith('/couponleo/api/seo/')) {
+      // Public SEO snapshots are served by Nginx, outside the busy catalog API.
+      return next(request.clone({
+        url: `https://couponleo.com${parsed.pathname}${parsed.search}`,
+        params: new HttpParams(),
+      }));
+    }
     const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
     const url = couponleoInternalReadUrl(request.urlWithParams, env['COUPONLEO_API_PORT'] ?? '5000', env['PORT'] ?? '4173');
     if (url) return next(request.clone({ url, params: new HttpParams() }));
