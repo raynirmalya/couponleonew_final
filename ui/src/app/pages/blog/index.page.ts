@@ -1344,7 +1344,7 @@ export default class BlogPage {
             title: category.name,
             copy: category.headline,
             detail: `${this.formatCount(category.couponCount, 'live offer', 'live offers')} | ${this.formatCount(category.storeCount ?? 0, 'store', 'stores')}`,
-            imageSrc: presentation.imageSrc,
+            imageSrc: this.categoryThumbnail(presentation.imageSrc),
             tone: storyToneFromPresentation(presentation.tone),
             href: buildCategoryRoute(category.slug),
             cta: this.labels().openCategory,
@@ -1421,7 +1421,7 @@ export default class BlogPage {
         title: category.name,
         copy: category.headline,
         detail: `${this.formatCount(category.couponCount, 'live offer', 'live offers')} | ${this.formatCount(category.storeCount ?? 0, 'store', 'stores')}`,
-        imageSrc: presentation.imageSrc,
+        imageSrc: this.categoryThumbnail(presentation.imageSrc),
         tone: storyToneFromPresentation(presentation.tone),
         href: buildCategoryRoute(category.slug),
         cta: this.labels().openCategory,
@@ -1475,14 +1475,31 @@ export default class BlogPage {
     return this.i18n.formatDate(parsed, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  private categoryThumbnail(imageSrc: string): string {
+    return imageSrc.startsWith('/assets/images/categories/') && imageSrc.endsWith('.webp')
+      ? imageSrc.replace(/\.webp$/, '-thumb.webp')
+      : imageSrc;
+  }
+
   private articleImage(article: CouponleoBlogArticle, index: number): string {
     if (article.imageUrl) {
+      try {
+        const image = new URL(article.imageUrl);
+        if (image.hostname === 'images.ctfassets.net') {
+          image.searchParams.set('w', '720');
+          image.searchParams.set('fm', 'webp');
+          image.searchParams.set('q', '75');
+          return image.toString();
+        }
+      } catch {
+        // Keep malformed upstream URLs unchanged so the existing fallback behavior remains.
+      }
       return article.imageUrl;
     }
 
     const category = this.content.topCategories()[index % Math.max(1, this.content.topCategories().length)];
     if (category) {
-      return getCategoryPresentation(category.slug).imageSrc;
+      return this.categoryThumbnail(getCategoryPresentation(category.slug).imageSrc);
     }
 
     return '/assets/images/blog/blog-hero-visual.webp';
