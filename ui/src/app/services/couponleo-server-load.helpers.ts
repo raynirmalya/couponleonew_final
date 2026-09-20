@@ -105,7 +105,7 @@ function buildCouponleoApiUrl(
   return `${resolveCouponleoApiBase(load)}${path}${buildQueryString(params)}`;
 }
 
-async function fetchCouponleoServerPayload<T>(load: PageServerLoad, url: string): Promise<T> {
+async function fetchCouponleoServerPayload<T>(load: PageServerLoad, url: string, timeoutMs?: number): Promise<T> {
   const cached = serverPayloadCache.get(url);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.payload as T;
@@ -119,7 +119,7 @@ async function fetchCouponleoServerPayload<T>(load: PageServerLoad, url: string)
   if (inFlight) return inFlight as Promise<T>;
   const pending = (async () => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), serverFetchTimeoutMs());
+  const timeout = setTimeout(() => controller.abort(), Math.min(serverFetchTimeoutMs(), timeoutMs ?? Infinity));
 
   try {
     const payload = await load.fetch<T>(url, { signal: controller.signal });
@@ -154,11 +154,13 @@ export async function fetchCouponleoList<T>(
   path: string,
   params: Record<string, QueryParamValue>,
   fallback: CouponleoListResponse<T>,
+  timeoutMs?: number,
 ): Promise<CouponleoListResponse<T>> {
   try {
     return await fetchCouponleoServerPayload<CouponleoListResponse<T>>(
       load,
       buildCouponleoApiUrl(load, path, params),
+      timeoutMs,
     );
   } catch {
     return fallback;

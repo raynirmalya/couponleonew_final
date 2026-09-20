@@ -310,6 +310,7 @@ from routes.categories import categories_bp
 from routes.coupons import coupons_bp
 from routes.locations import locations_bp
 from routes.newsletter import newsletter_bp
+from routes.seo_groupings import seo_groupings_bp
 from routes.stores import stores_bp
 from routes.telemetry import telemetry_bp
 from data.repository import repository
@@ -321,6 +322,7 @@ couponleoapi.register_blueprint(categories_bp, url_prefix=f"{Config.API_PREFIX}/
 couponleoapi.register_blueprint(coupons_bp, url_prefix=f"{Config.API_PREFIX}/coupons")
 couponleoapi.register_blueprint(locations_bp, url_prefix=f"{Config.API_PREFIX}/locations")
 couponleoapi.register_blueprint(newsletter_bp, url_prefix=f"{Config.API_PREFIX}/newsletter")
+couponleoapi.register_blueprint(seo_groupings_bp, url_prefix=f"{Config.API_PREFIX}/seo")
 couponleoapi.register_blueprint(stores_bp, url_prefix=f"{Config.API_PREFIX}/stores")
 couponleoapi.register_blueprint(telemetry_bp, url_prefix=f"{Config.API_PREFIX}/telemetry")
 

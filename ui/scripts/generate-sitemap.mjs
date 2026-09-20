@@ -39,7 +39,10 @@ const STATIC_ROUTES = [
   { pathname: '/categories', changefreq: 'daily', priority: '0.92' },
   { pathname: '/country-deals', changefreq: 'daily', priority: '0.90' },
   { pathname: '/top-deals', changefreq: 'daily', priority: '0.94' },
+  { pathname: '/top-coupons', changefreq: 'daily', priority: '0.84' },
   { pathname: '/blog', changefreq: 'weekly', priority: '0.72' },
+  { pathname: '/blog/why-promo-codes-do-not-work', changefreq: 'monthly', priority: '0.66' },
+  { pathname: '/blog/compare-coupon-deals', changefreq: 'monthly', priority: '0.66' },
   { pathname: '/about', changefreq: 'monthly', priority: '0.45' },
   { pathname: '/contact', changefreq: 'monthly', priority: '0.50' },
   { pathname: '/help-center', changefreq: 'monthly', priority: '0.42' },
@@ -207,8 +210,13 @@ function cleanupStaleSitemaps(expectedFilenames) {
 const stores = readJson('stores-summary.json');
 const categories = readJson('categories-summary.json');
 const locations = readJson('locations-summary.json');
+const groupingsPath = resolve(dataDirectory, 'seo-groupings-summary.json');
+const seoGroupings = existsSync(groupingsPath)
+  ? readJson('seo-groupings-summary.json')
+  : { countries: [], groups: [] };
 const staticEntries = new Map();
 const countryEntries = new Map();
+const groupEntries = new Map();
 const categoryEntries = new Map();
 const storeEntries = new Map();
 const localizedStaticEntries = new Map();
@@ -219,6 +227,7 @@ let staticCount = 0;
 let storeCount = 0;
 let categoryCount = 0;
 let countryLandingCount = 0;
+let groupCount = 0;
 let localizedStaticCount = 0;
 let localizedCategoryCount = 0;
 let localizedCountryLandingCount = 0;
@@ -279,6 +288,35 @@ for (const location of locations) {
   }
 }
 
+const eligibleCountries = new Set();
+for (const country of seoGroupings.countries ?? []) {
+  const slug = String(country.slug ?? '');
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)
+      || Number(country.couponCount) < 10
+      || Number(country.storeCount) < 3) {
+    continue;
+  }
+  eligibleCountries.add(slug);
+  if (addEntry(countryEntries, `/top-coupons/${slug}`, { changefreq: 'daily', priority: '0.82' })) {
+    countryLandingCount += 1;
+  }
+}
+
+for (const group of seoGroupings.groups ?? []) {
+  const country = String(group.countrySlug ?? '');
+  const category = String(group.categorySlug ?? '');
+  if (!eligibleCountries.has(country)
+      || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(category)
+      || EXCLUDED_CATEGORY_SLUGS.has(category)
+      || Number(group.couponCount) < 10
+      || Number(group.storeCount) < 3) {
+    continue;
+  }
+  if (addEntry(groupEntries, `/top-coupons/${country}/${category}`, { changefreq: 'daily', priority: '0.72' })) {
+    groupCount += 1;
+  }
+}
+
 for (const category of categories) {
   if (!shouldIncludeCategory(category)) {
     continue;
@@ -317,6 +355,7 @@ for (const store of stores) {
 const sitemapFiles = [
   { filename: 'static.xml', entries: [...staticEntries.values()] },
   { filename: 'countries.xml', entries: [...countryEntries.values()] },
+  { filename: 'groups.xml', entries: [...groupEntries.values()] },
   { filename: 'categories.xml', entries: [...categoryEntries.values()] },
   { filename: 'locales-static.xml', entries: [...localizedStaticEntries.values()] },
   { filename: 'locales-countries.xml', entries: [...localizedCountryEntries.values()] },
@@ -360,12 +399,13 @@ console.log(
     `Files: ${sitemapFiles.length}`,
     `Static: ${staticCount}`,
     `Country landings: ${countryLandingCount}`,
+    `Country/category groups: ${groupCount}`,
     `Categories: ${categoryCount}`,
     `Stores: ${storeCount}`,
     `Store files: ${storeEntryChunks.length}`,
     `Localized static: ${localizedStaticCount}`,
     `Localized country landings: ${localizedCountryLandingCount}`,
     `Localized categories: ${localizedCategoryCount}`,
-    `Total URLs: ${staticCount + countryLandingCount + categoryCount + storeCount + localizedStaticCount + localizedCountryLandingCount + localizedCategoryCount}`,
+    `Total URLs: ${staticCount + countryLandingCount + groupCount + categoryCount + storeCount + localizedStaticCount + localizedCountryLandingCount + localizedCategoryCount}`,
   ].join(' '),
 );

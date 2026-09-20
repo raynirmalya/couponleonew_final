@@ -45,7 +45,7 @@ function emptyListResponse<T>() {
             (click)="closeMenu()"
           >
             <span class="couponleo-brand__image-shell">
-              <img class="couponleo-brand__image" src="/images/couponleo-logo.png" alt="CouponLeo">
+              <img class="couponleo-brand__image" src="/images/couponleo-logo.webp" alt="CouponLeo" width="1078" height="231" decoding="async">
             </span>
           </a>
 
@@ -306,9 +306,10 @@ export class CouponleoHeaderComponent {
   protected readonly navLinks = computed<HeaderLink[]>(() => [
     { href: this.localizeRoute('/stores'), label: this.i18n.t('nav.stores') },
     { href: this.localizeRoute('/categories'), label: this.i18n.t('nav.categories') },
+    { href: this.localizeRoute('/blog'), label: this.i18n.t('nav.blog') },
     { href: this.localizeRoute('/country-deals'), label: this.i18n.t('nav.countryDeals') },
     { href: this.localizeRoute('/top-deals'), label: this.i18n.t('nav.topDeals') },
-    { href: this.localizeRoute('/blog'), label: this.i18n.t('nav.blog') },
+    { href: '/top-coupons', label: 'Top Coupons' },
   ]);
   protected readonly isAuthenticated = this.authService.isAuthenticated;
   protected readonly localeOptions = this.localeService.localeOptions;

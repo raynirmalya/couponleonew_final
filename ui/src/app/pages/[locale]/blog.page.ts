@@ -1,1 +1,1 @@
-export { default, load, routeMeta } from '../blog.page';
+export { default, load, routeMeta } from '../blog/index.page';

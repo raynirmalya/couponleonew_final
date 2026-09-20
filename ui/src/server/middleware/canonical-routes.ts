@@ -4,7 +4,7 @@ const aliases: Record<string, string> = {
   '/home': '/', '/index-2': '/', '/about-us': '/about',
   '/stores-details': '/stores', '/stores-details-2': '/stores', '/coupon-style': '/top-deals',
 };
-const publicSegments = new Set('stores categories country-deals top-deals blog blogs about contact help-center privacy-policy terms-of-use sign-in sign-up signin signup login saved wishlist alerts analytics dashboard settings my-coupons forgot-password extension-bridge help faq faqs collection collections terms-conditions de fr es it pt nl hi ja ar'.split(' '));
+const publicSegments = new Set('stores categories country-deals top-deals top-coupons blog blogs about contact help-center privacy-policy terms-of-use sign-in sign-up signin signup login saved wishlist alerts analytics dashboard settings my-coupons forgot-password extension-bridge help faq faqs collection collections terms-conditions de fr es it pt nl hi ja ar'.split(' '));
 
 export default defineEventHandler(event => {
   const url = getRequestURL(event);

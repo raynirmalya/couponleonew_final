@@ -4,7 +4,7 @@ import { provideLocationMocks } from '@angular/common/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { delay, of } from 'rxjs';
 
-import BlogPage from './blog.page';
+import BlogPage from './blog/index.page';
 import CategoryDealsPage from './categories/[slug].page';
 import CategoriesPage from './categories/index.page';
 import CountryDealsPage from './country-deals.page';

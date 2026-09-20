@@ -19,9 +19,13 @@ interface FooterGroup {
         <div class="couponleo-newsletter__art" aria-hidden="true">
           <img
             class="couponleo-newsletter__art-image"
-            src="/assets/images/illustrations/newsletter-envelope-v2.png"
+            src="/assets/images/illustrations/newsletter-envelope-v2.webp"
             alt=""
             loading="lazy"
+            decoding="async"
+            fetchpriority="low"
+            width="1402"
+            height="1122"
           >
         </div>
         <div class="couponleo-newsletter__copy">
@@ -49,7 +53,7 @@ interface FooterGroup {
             [attr.data-telemetry-label]="copy().couponleoHome"
           >
             <span class="couponleo-brand__footer-mark" aria-hidden="true">
-              <img class="couponleo-brand__footer-mark-image" src="/images/couponleo-logo.png" alt="">
+              <img class="couponleo-brand__footer-mark-image" src="/images/couponleo-logo.webp" alt="" width="1078" height="231" decoding="async">
             </span>
             <span class="couponleo-brand__footer-wordmark">
               <span class="couponleo-brand__footer-word couponleo-brand__footer-word--coupon">Coupon</span>

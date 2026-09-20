@@ -3,25 +3,26 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { type PageServerLoad } from '@analogjs/router';
 import { of } from 'rxjs';
-import { CouponleoEonIconComponent } from '../components/couponleo-eon-icon.component';
-import { CouponleoNewsletterFormComponent } from '../components/couponleo-newsletter-form.component';
+import { CouponleoEonIconComponent } from '../../components/couponleo-eon-icon.component';
+import { CouponleoNewsletterFormComponent } from '../../components/couponleo-newsletter-form.component';
+import { couponleoGuides } from '../../content/couponleo-guides';
 import {
   CouponleoApiService,
   type CouponleoBlogArticle,
   type CouponleoListResponse,
-} from '../services/couponleo-api.service';
-import { CouponleoI18nService } from '../services/couponleo-i18n.service';
-import { CouponleoPageContentService } from '../services/couponleo-page-content.service';
-import { createLoadingState, withHydratedRequestState } from '../services/couponleo-request-state.helpers';
-import { createStaticRouteMeta } from '../services/couponleo-route-meta';
-import { fetchCouponleoList } from '../services/couponleo-server-load.helpers';
+} from '../../services/couponleo-api.service';
+import { CouponleoI18nService } from '../../services/couponleo-i18n.service';
+import { CouponleoPageContentService } from '../../services/couponleo-page-content.service';
+import { createLoadingState, withHydratedRequestState } from '../../services/couponleo-request-state.helpers';
+import { createStaticRouteMeta } from '../../services/couponleo-route-meta';
+import { fetchCouponleoList } from '../../services/couponleo-server-load.helpers';
 import {
   buildCategoryRoute,
   buildStoreRoute,
   formatExpiryLabel,
   getCategoryPresentation,
   localizeCouponleoRoute,
-} from '../services/couponleo-ui.helpers';
+} from '../../services/couponleo-ui.helpers';
 
 import tagIconSvg from '@eonui/icons/svg/commerce/eon-tag.svg?raw';
 import newspaperIconSvg from '@eonui/icons/svg/media/eon-newspaper.svg?raw';
@@ -131,6 +132,7 @@ export async function load(pageServerLoad: PageServerLoad) {
       '/articles',
       { pageSize: 18 },
       emptyArticleResponse(),
+      1_200,
     ),
   };
 }
@@ -182,9 +184,13 @@ export async function load(pageServerLoad: PageServerLoad) {
           <span class="couponleo-blog-shell__hero-spark couponleo-blog-shell__hero-spark--orange"></span>
           <img
             class="couponleo-blog-shell__hero-image"
-            src="/assets/images/blog/blog-hero-visual.png"
+            src="/assets/images/blog/blog-hero-visual.webp"
             alt="CouponLeo blog hero showing story search, sale calendar, and coupon tips"
             loading="eager"
+            decoding="async"
+            fetchpriority="high"
+            width="1536"
+            height="1024"
           >
         </div>
       </section>
@@ -206,6 +212,22 @@ export async function load(pageServerLoad: PageServerLoad) {
 
       <section class="couponleo-blog-shell__content">
         <div class="couponleo-blog-shell__main">
+          <section class="couponleo-blog-section" aria-labelledby="couponleo-original-guides">
+            <div class="couponleo-section-heading">
+              <div>
+                <h2 id="couponleo-original-guides">Practical coupon guides</h2>
+                <p>Original CouponLeo advice for checking codes and comparing the final price.</p>
+              </div>
+            </div>
+            <div class="couponleo-blog-shell__guide-grid">
+              @for (guide of originalGuides; track guide.slug) {
+                <article class="couponleo-blog-store-card">
+                  <h3><a [routerLink]="['/blog', guide.slug]">{{ guide.title }}</a></h3>
+                  <p>{{ guide.summary }}</p>
+                </article>
+              }
+            </div>
+          </section>
           <section class="couponleo-blog-section couponleo-blog-section--editorial">
             <div class="couponleo-section-heading">
               <div>
@@ -1193,6 +1215,7 @@ export async function load(pageServerLoad: PageServerLoad) {
   `],
 })
 export default class BlogPage {
+  protected readonly originalGuides = couponleoGuides;
   private readonly api = inject(CouponleoApiService);
   private readonly content = inject(CouponleoPageContentService);
   private readonly route = inject(ActivatedRoute);
@@ -1205,7 +1228,7 @@ export default class BlogPage {
       of(undefined),
       () => this.api.listBlogArticles({ pageSize: 18 }),
       emptyArticleResponse(),
-      () => this.initialLoad?.articles,
+      () => this.initialLoad?.articles?.items.length ? this.initialLoad.articles : undefined,
     ),
     { initialValue: createLoadingState(emptyArticleResponse()) },
   );
@@ -1460,6 +1483,6 @@ export default class BlogPage {
       return getCategoryPresentation(category.slug).imageSrc;
     }
 
-    return '/assets/images/blog/blog-hero-visual.png';
+    return '/assets/images/blog/blog-hero-visual.webp';
   }
 }

@@ -1502,6 +1502,15 @@ class CouponLeoRepository:
 
         return deepcopy(ranked_items[:limit])
 
+    def items_view(self, collection: str) -> tuple[Dict[str, Any], ...]:
+        """Return item references for read-only internal aggregations.
+
+        This avoids deep-copying and ranking the entire coupon catalog for
+        country/category counts. Callers must not mutate any returned item.
+        """
+        self._load_data()
+        return tuple(self._data.get(collection, []))
+
     def list_items_page(self, collection: str, limit: Optional[int] = None) -> tuple[List[Dict[str, Any]], int]:
         self._load_data()
         ranked_items = self._cached_ranked_items(collection)

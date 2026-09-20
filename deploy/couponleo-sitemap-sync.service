@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh CouponLeo sitemap from live coupon inventory
+After=cpleo-api.service couponleo-ui.service
+Wants=cpleo-api.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/bash /root/code/couponleonew_final/ui/scripts/sync-live-sitemap.sh
+TimeoutStartSec=180

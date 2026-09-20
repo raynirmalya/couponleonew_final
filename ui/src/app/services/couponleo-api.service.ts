@@ -235,6 +235,16 @@ export interface CouponleoCategoryListParams {
   pageSize?: number;
 }
 
+export interface CouponleoCountryHighlights {
+  items: CouponleoCoupon[];
+  total: number;
+}
+
+export interface CouponleoSeoGroupings {
+  countries: { slug: string; name: string; couponCount: number; storeCount: number }[];
+  groups: { countrySlug: string; countryName: string; categorySlug: string; categoryName: string; couponCount: number; storeCount: number }[];
+}
+
 export interface CouponleoCouponListParams {
   active?: boolean;
   category?: string;
@@ -325,6 +335,18 @@ export class CouponleoApiService {
   listCoupons(params: CouponleoCouponListParams = {}): Observable<CouponleoListResponse<CouponleoCoupon>> {
     const httpParams = this.buildParams(params);
     return this.cachedGet<CouponleoListResponse<CouponleoCoupon>>(`${this.baseUrl}/coupons`, httpParams, this.couponReadCacheTtlMs);
+  }
+
+  listSeoGroupings(): Observable<CouponleoSeoGroupings> {
+    return this.cachedGet<CouponleoSeoGroupings>(`${this.baseUrl}/seo/groupings`, undefined, this.marketReadCacheTtlMs);
+  }
+
+  listCountryCouponHighlights(country: string, category?: string): Observable<CouponleoCountryHighlights> {
+    return this.cachedGet<CouponleoCountryHighlights>(
+      `${this.baseUrl}/seo/highlights`,
+      this.buildParams({ country, category }),
+      this.couponReadCacheTtlMs,
+    );
   }
 
   listFeaturedCoupons(
