@@ -694,7 +694,7 @@ def write_manifest(categories: list[dict[str, str]], manifest_path: Path) -> Non
         manifest_lines.extend([
             f"  '{slug}': {{",
             f"    name: '{name}',",
-            f"    imageSrc: '/assets/images/categories/{slug}.png',",
+            f"    imageSrc: '/assets/images/categories/{slug}.webp',",
             f"    imageAlt: '{name} category illustration',",
             f"    theme: '{theme}',",
             "  },",
@@ -713,7 +713,7 @@ def generate_assets(categories: list[dict[str, str]], output_dir: Path, overwrit
     skipped = 0
     for category in categories:
         slug = category["slug"]
-        target = output_dir / f"{slug}.png"
+        target = output_dir / f"{slug}.webp"
         if target.exists() and slug in PROTECTED_EXISTING_SLUGS:
             skipped += 1
             continue
@@ -722,7 +722,7 @@ def generate_assets(categories: list[dict[str, str]], output_dir: Path, overwrit
             continue
         theme = resolve_theme(slug, category["name"])
         image = render_category_image(category["name"], theme)
-        image.save(target, format="PNG", optimize=True, compress_level=9)
+        image.save(target, format="WEBP", quality=82, method=6)
         created += 1
     return created, skipped
 
@@ -730,7 +730,7 @@ def generate_assets(categories: list[dict[str, str]], output_dir: Path, overwrit
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate CouponLeo category images from the live local API.")
     parser.add_argument("--api-url", default=DEFAULT_API_URL, help="Local CouponLeo category API URL.")
-    parser.add_argument("--output-dir", default=str(OUTPUT_DIR), help="Directory for category PNG files.")
+    parser.add_argument("--output-dir", default=str(OUTPUT_DIR), help="Directory for category WebP files.")
     parser.add_argument("--manifest-path", default=str(MANIFEST_PATH), help="Generated TypeScript manifest path.")
     parser.add_argument("--overwrite", action="store_true", help="Regenerate existing exact-slug assets.")
     args = parser.parse_args()
