@@ -184,8 +184,8 @@ export async function load(pageServerLoad: PageServerLoad) {
           <span class="couponleo-blog-shell__hero-spark couponleo-blog-shell__hero-spark--orange"></span>
           <img
             class="couponleo-blog-shell__hero-image"
-            src="/assets/images/blog/blog-hero-visual-1024.webp"
-            srcset="/assets/images/blog/blog-hero-visual-768.webp 768w, /assets/images/blog/blog-hero-visual-1024.webp 1024w, /assets/images/blog/blog-hero-visual.webp 1536w"
+            src="/assets/images/blog/blog-hero-evergreen-1024.webp"
+            srcset="/assets/images/blog/blog-hero-evergreen-768.webp 768w, /assets/images/blog/blog-hero-evergreen-1024.webp 1024w, /assets/images/blog/blog-hero-evergreen.webp 1536w"
             sizes="(max-width: 640px) calc(100vw - 40px), 45vw"
             alt="CouponLeo blog hero showing story search, sale calendar, and coupon tips"
             loading="eager"
@@ -1502,6 +1502,6 @@ export default class BlogPage {
       return this.categoryThumbnail(getCategoryPresentation(category.slug).imageSrc);
     }
 
-    return '/assets/images/blog/blog-hero-visual.webp';
+    return '/assets/images/blog/blog-hero-evergreen.webp';
   }
 }

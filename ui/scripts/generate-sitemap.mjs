@@ -41,6 +41,7 @@ const STATIC_ROUTES = [
   { pathname: '/top-deals', changefreq: 'daily', priority: '0.94' },
   { pathname: '/top-coupons', changefreq: 'daily', priority: '0.84' },
   { pathname: '/blog', changefreq: 'weekly', priority: '0.72' },
+  { pathname: '/blog/compare-coupons-across-countries', changefreq: 'monthly', priority: '0.66' },
   { pathname: '/blog/why-promo-codes-do-not-work', changefreq: 'monthly', priority: '0.66' },
   { pathname: '/blog/compare-coupon-deals', changefreq: 'monthly', priority: '0.66' },
   { pathname: '/about', changefreq: 'monthly', priority: '0.45' },

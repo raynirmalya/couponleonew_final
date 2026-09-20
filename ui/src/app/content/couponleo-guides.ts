@@ -14,6 +14,47 @@ export interface CouponleoGuide {
 
 export const couponleoGuides: readonly CouponleoGuide[] = [
   {
+    slug: 'compare-coupons-across-countries',
+    title: 'How to compare coupons across countries',
+    description: 'Compare country-specific coupons using eligibility, currency, shipping, and the final checkout total.',
+    summary: 'A practical checklist for judging a deal when the store, currency, and delivery country differ.',
+    sections: [
+      {
+        heading: 'Start with the right market and category',
+        paragraphs: [
+          'Choose the country where you plan to shop and the category that matches the product. A coupon shown for one market may have a different code, eligible products, or end date in another. A store appearing in a country list does not by itself confirm that it will ship every item to your address.',
+          'Open the merchant page from the offer and set your delivery country there. Check that the product and offer are available in that version of the store before comparing prices.',
+        ],
+      },
+      {
+        heading: 'Compare the amount you will actually pay',
+        paragraphs: [
+          'Convert prices into one currency for comparison, but use the rate and fees shown by your payment provider before ordering. Add the shipping charge and any tax or import costs the checkout displays. If a cost is not shown yet, treat the displayed subtotal as incomplete.',
+          'A larger percentage discount can lose to a smaller local offer once delivery and other charges are included. Keep the same item, quantity, and delivery address in both baskets so the comparison is fair.',
+        ],
+        steps: [
+          'Record the item total after the coupon is applied.',
+          'Add shipping and any charges shown before payment.',
+          'Check the payment currency and any conversion fee.',
+          'Compare the final payable totals, then review the return terms.',
+        ],
+      },
+      {
+        heading: 'Read the coupon conditions before applying it',
+        paragraphs: [
+          'Look for a minimum spend, excluded products, first-order requirement, payment method, and country restriction. A code may be valid but still fail for the basket you chose. Apply it at checkout and confirm that the payable total changes as expected.',
+          'CouponLeo may show a verification status when an offer has current review evidence. That status is a useful signal, but the merchant checkout decides whether the offer works for your order. You can report whether an offer worked so it can be reviewed.',
+        ],
+      },
+      {
+        heading: 'Check delivery and returns before ordering',
+        paragraphs: [
+          'Read the delivery estimate and return policy for your destination. A low item price may be a poor choice if a return would be expensive or difficult. Compare the full order, not just the coupon headline, and keep a copy of the offer terms until the purchase is complete.',
+        ],
+      },
+    ],
+  },
+  {
     slug: 'why-promo-codes-do-not-work',
     title: 'Why is my promo code not working?',
     description: 'Check expiry, minimum spend, eligible items, market restrictions, and code stacking before giving up on a coupon.',
