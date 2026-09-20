@@ -68,7 +68,7 @@ export const routeMeta = createDynamicRouteMeta((route) => {
   styles: [`
     .couponleo-guide { max-width: 780px; margin: 0 auto; padding: 36px 20px 80px; color: var(--couponleo-text); }
     .couponleo-guide__breadcrumbs { display: flex; flex-wrap: wrap; gap: 10px; font-size: .88rem; margin-bottom: 42px; }
-    .couponleo-guide a { color: var(--couponleo-orange); text-decoration: underline; text-underline-offset: 3px; }
+    .couponleo-guide a { color: #183a91; text-decoration: underline; text-underline-offset: 3px; }
     .couponleo-guide a:focus-visible { outline: 3px solid var(--couponleo-orange); outline-offset: 4px; }
     .couponleo-guide__header { margin-bottom: 44px; }
     .couponleo-guide__header h1 { font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.12; margin: 12px 0 20px; }

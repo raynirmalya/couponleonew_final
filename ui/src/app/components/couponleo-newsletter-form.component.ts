@@ -300,7 +300,9 @@ export class CouponleoNewsletterFormComponent implements OnInit {
       : (this.buttonLabel() || this.i18n.t('newsletter.subscribe'))
   ));
   protected readonly resolvedPlaceholder = computed(() => this.placeholder() || this.i18n.t('newsletter.placeholder'));
-  protected readonly resolvedButtonAriaLabel = computed(() => this.buttonAriaLabel() || this.i18n.t('newsletter.subscribeAria'));
+  protected readonly resolvedButtonAriaLabel = computed(() => (
+    this.iconOnly() && this.hasButtonIcon() ? (this.buttonAriaLabel() || this.currentButtonLabel()) : null
+  ));
 
   ngOnInit(): void {
     const session = this.auth.session();
