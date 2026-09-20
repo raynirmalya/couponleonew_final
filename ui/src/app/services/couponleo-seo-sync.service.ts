@@ -418,7 +418,7 @@ export class CouponleoSeoSyncService {
       imagePath = '/assets/images/heroes/category-hero.png';
     } else if (pathname === '/stores' || /^\/stores\/[^/]+$/.test(pathname)) {
       imagePath = '/assets/images/heroes/stores-hero.png';
-    } else if (pathname === '/blog' || /^\/blog\/(why-promo-codes-do-not-work|compare-coupon-deals)$/.test(pathname)) {
+    } else if (pathname === '/blog' || /^\/blog\/(why-promo-codes-do-not-work|compare-coupon-deals|compare-coupons-across-countries)$/.test(pathname)) {
       imagePath = '/assets/images/blog/blog-hero-evergreen-1024.webp';
     }
 

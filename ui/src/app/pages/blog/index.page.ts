@@ -125,9 +125,21 @@ function emptyArticleResponse(): CouponleoListResponse<CouponleoBlogArticle> {
   };
 }
 
+async function readArticleSnapshot(): Promise<CouponleoListResponse<CouponleoBlogArticle> | undefined> {
+  if (!import.meta.env.SSR) return undefined;
+  try {
+    const { readFile } = await import('node:fs/promises');
+    const raw = await readFile('/srv/couponleo-seo-data/articles.json', 'utf8');
+    const snapshot = JSON.parse(raw) as CouponleoListResponse<CouponleoBlogArticle>;
+    return Array.isArray(snapshot.items) && snapshot.items.length > 0 ? snapshot : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function load(pageServerLoad: PageServerLoad) {
   return {
-    articles: await fetchCouponleoList(
+    articles: await readArticleSnapshot() ?? await fetchCouponleoList(
       pageServerLoad,
       '/seo/articles',
       { pageSize: 18 },
@@ -185,7 +197,7 @@ export async function load(pageServerLoad: PageServerLoad) {
           <img
             class="couponleo-blog-shell__hero-image"
             src="/assets/images/blog/blog-hero-evergreen-1024.webp"
-            srcset="/assets/images/blog/blog-hero-evergreen-768.webp 768w, /assets/images/blog/blog-hero-evergreen-1024.webp 1024w, /assets/images/blog/blog-hero-evergreen.webp 1536w"
+            srcset="/assets/images/blog/blog-hero-evergreen-560.webp 560w, /assets/images/blog/blog-hero-evergreen-768.webp 768w, /assets/images/blog/blog-hero-evergreen-1024.webp 1024w, /assets/images/blog/blog-hero-evergreen.webp 1536w"
             sizes="(max-width: 640px) calc(100vw - 40px), 45vw"
             alt="CouponLeo blog hero showing story search, sale calendar, and coupon tips"
             loading="eager"
