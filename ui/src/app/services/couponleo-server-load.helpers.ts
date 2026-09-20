@@ -102,7 +102,10 @@ function buildCouponleoApiUrl(
   path: string,
   params: Record<string, QueryParamValue> = {},
 ): string {
-  return `${resolveCouponleoApiBase(load)}${path}${buildQueryString(params)}`;
+  const base = path.startsWith('/seo/')
+    ? 'https://couponleo.com/couponleo/api'
+    : resolveCouponleoApiBase(load);
+  return `${base}${path}${buildQueryString(params)}`;
 }
 
 async function fetchCouponleoServerPayload<T>(load: PageServerLoad, url: string, timeoutMs?: number): Promise<T> {

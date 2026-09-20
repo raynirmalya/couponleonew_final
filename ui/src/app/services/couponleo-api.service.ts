@@ -464,6 +464,12 @@ export class CouponleoApiService {
   }
 
   listBlogArticles(params: CouponleoBlogArticleListParams = {}): Observable<CouponleoListResponse<CouponleoBlogArticle>> {
+    if (params.pageSize === 18 && params.page === undefined && params.q === undefined
+      && params.source === undefined && params.topic === undefined && params.featured === undefined) {
+      return this.cachedGet<CouponleoListResponse<CouponleoBlogArticle>>(
+        `${this.baseUrl}/seo/articles`, undefined, this.publicReadCacheTtlMs,
+      );
+    }
     const httpParams = this.buildParams(params);
     return this.cachedGet<CouponleoListResponse<CouponleoBlogArticle>>(`${this.baseUrl}/articles`, httpParams);
   }

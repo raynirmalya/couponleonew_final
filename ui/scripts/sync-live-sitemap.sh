@@ -30,3 +30,8 @@ PY
 
 cd "$source_root/ui"
 COUPONLEO_PUBLIC_DIRECTORY="$public_dir" node scripts/generate-sitemap.mjs
+
+# A failed blog refresh leaves the previous public article snapshot in place.
+if ! timeout 45s /root/code/venv/bin/python "$source_root/ui/scripts/sync-blog-articles.py"; then
+  echo "Blog article snapshot refresh failed; previous snapshot retained" >&2
+fi

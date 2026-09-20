@@ -129,7 +129,7 @@ export async function load(pageServerLoad: PageServerLoad) {
   return {
     articles: await fetchCouponleoList(
       pageServerLoad,
-      '/articles',
+      '/seo/articles',
       { pageSize: 18 },
       emptyArticleResponse(),
       1_200,
