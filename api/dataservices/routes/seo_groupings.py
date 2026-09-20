@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
+import json
+import logging
+import os
+from pathlib import Path
 from threading import Lock
 from time import monotonic
 
@@ -19,6 +23,7 @@ _CACHE_SECONDS = 900
 _MIN_COUPONS = 10
 _MIN_STORES = 3
 _EXCLUDED_CATEGORIES = {"coupons", "deals", "general", "other", "others"}
+_PUBLIC_DATA_DIR = Path(os.environ.get("COUPONLEO_SEO_DATA_DIR", "/srv/couponleo-seo-data"))
 
 
 def _slug(name: str) -> str:
@@ -117,12 +122,38 @@ def _build_index() -> tuple[dict, dict]:
     return public, highlights
 
 
+def _write_json_atomic(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with temporary.open("w", encoding="utf-8") as file:
+            json.dump(payload, file, ensure_ascii=False, separators=(",", ":"))
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _publish_static(public: dict, highlights: dict) -> None:
+    """Keep SSR grouping requests independent of the main API's traffic."""
+    for (country, category), result in highlights.items():
+        _write_json_atomic(
+            _PUBLIC_DATA_DIR / "highlights" / country / f"{category}.json",
+            {"items": prepare_offers(result["items"]), "total": result["total"]},
+        )
+    # Publish the manifest last so new groups are never listed before their files exist.
+    _write_json_atomic(_PUBLIC_DATA_DIR / "groupings.json", public)
+
+
 def _index() -> tuple[dict, dict]:
     global _cached
     now = monotonic()
     with _lock:
         if _cached is None or now - _cached[0] >= _CACHE_SECONDS:
             public, highlights = _build_index()
+            try:
+                _publish_static(public, highlights)
+            except OSError:
+                logging.getLogger(__name__).exception("Could not refresh static SEO data")
             _cached = (now, public, highlights)
         return _cached[1], _cached[2]
 

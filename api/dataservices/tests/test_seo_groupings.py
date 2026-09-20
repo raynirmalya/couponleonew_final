@@ -1,10 +1,25 @@
 import unittest
+from pathlib import Path
+import json
+import tempfile
 from unittest.mock import patch
 
 from routes import seo_groupings
 
 
 class SeoGroupingTests(unittest.TestCase):
+    def test_publishes_groupings_and_highlights_as_atomic_json_files(self):
+        public = {"countries": [{"slug": "india"}], "groups": []}
+        highlights = {("india", ""): {"items": [], "total": 12}}
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(seo_groupings, "_PUBLIC_DATA_DIR", Path(directory)):
+                seo_groupings._publish_static(public, highlights)
+            self.assertEqual(json.loads((Path(directory) / "groupings.json").read_text()), public)
+            self.assertEqual(
+                json.loads((Path(directory) / "highlights" / "india" / ".json").read_text()),
+                {"items": [], "total": 12},
+            )
+
     def test_groups_require_real_active_offers_from_several_stores(self):
         coupons = [
             {

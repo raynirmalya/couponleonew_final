@@ -513,7 +513,7 @@ export class CouponleoApiService {
     const request$ = this.http.get<T>(url, params ? { params } : {}).pipe(
       timeout({
         first: isPlatformServer(this.platformId)
-          ? couponleoServerReadTimeoutMs()
+          ? (url.includes('/seo/') ? Math.max(couponleoServerReadTimeoutMs(), 20_000) : couponleoServerReadTimeoutMs())
           : 30_000,
       }),
       catchError((error) => {
