@@ -182,25 +182,18 @@ export async function load(pageServerLoad: PageServerLoad) {
         <div class="couponleo-blog-shell__hero-visual">
           <span class="couponleo-blog-shell__hero-spark couponleo-blog-shell__hero-spark--blue"></span>
           <span class="couponleo-blog-shell__hero-spark couponleo-blog-shell__hero-spark--orange"></span>
-          <picture class="couponleo-blog-shell__hero-picture">
-            <source
-              type="image/avif"
-              srcset="/assets/images/blog/blog-hero-visual-560.avif 560w, /assets/images/blog/blog-hero-visual-1024.avif 1024w, /assets/images/blog/blog-hero-visual.avif 1536w"
-              sizes="(max-width: 640px) calc(100vw - 40px), 45vw"
-            >
-            <img
-              class="couponleo-blog-shell__hero-image"
-              src="/assets/images/blog/blog-hero-visual-1024.webp"
-              srcset="/assets/images/blog/blog-hero-visual-768.webp 768w, /assets/images/blog/blog-hero-visual-1024.webp 1024w, /assets/images/blog/blog-hero-visual.webp 1536w"
-              sizes="(max-width: 640px) calc(100vw - 40px), 45vw"
-              alt="CouponLeo blog hero showing story search, sale calendar, and coupon tips"
-              loading="eager"
-              decoding="async"
-              fetchpriority="high"
-              width="1536"
-              height="1024"
-            >
-          </picture>
+          <img
+            class="couponleo-blog-shell__hero-image"
+            src="/assets/images/blog/blog-hero-visual-1024.webp"
+            srcset="/assets/images/blog/blog-hero-visual-768.webp 768w, /assets/images/blog/blog-hero-visual-1024.webp 1024w, /assets/images/blog/blog-hero-visual.webp 1536w"
+            sizes="(max-width: 640px) calc(100vw - 40px), 45vw"
+            alt="CouponLeo blog hero showing story search, sale calendar, and coupon tips"
+            loading="eager"
+            decoding="async"
+            fetchpriority="high"
+            width="1536"
+            height="1024"
+          >
         </div>
       </section>
 
@@ -557,10 +550,6 @@ export async function load(pageServerLoad: PageServerLoad) {
       border-radius: 26px;
       background:
         radial-gradient(circle at center, rgba(255, 249, 242, 0.98) 0%, rgba(255, 244, 232, 0.84) 56%, rgba(251, 238, 228, 0.24) 100%);
-    }
-
-    .couponleo-blog-shell__hero-picture {
-      display: block;
     }
 
     .couponleo-blog-shell__hero-image {
@@ -1497,7 +1486,7 @@ export default class BlogPage {
       try {
         const image = new URL(article.imageUrl);
         if (image.hostname === 'images.ctfassets.net') {
-          image.searchParams.set('w', '480');
+          image.searchParams.set('w', '720');
           image.searchParams.set('fm', 'webp');
           image.searchParams.set('q', '75');
           return image.toString();
