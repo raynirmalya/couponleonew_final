@@ -19,6 +19,7 @@ import {
   type CouponleoSavedItem,
 } from '../services/couponleo-saved.service';
 import { CouponleoApiService } from '../services/couponleo-api.service';
+import { CouponleoNewsletterService } from '../services/couponleo-newsletter.service';
 
 function createAuthMock(session: CouponleoSession | null = null): Pick<
   CouponleoAuthService,
@@ -255,15 +256,22 @@ describe('CouponLeo navigation shell', () => {
     expect(fixture.nativeElement.querySelector('.couponleo-dashboard-card__alert-summary')).not.toBeNull();
   }, 25_000);
 
-  it('renders the member utility pages with active dashboard navigation', async () => {
+  it('renders current alert matches from saved stores', async () => {
     const fixture = await createFixture(AlertsPage, [
-      { provide: CouponleoApiService, useValue: createContentApiMock() },
+      { provide: CouponleoSavedService, useValue: createSavedMock([
+        { id: 'store-shop', kind: 'store', title: 'Shop', subtitle: 'Store', description: 'Saved store', route: '/stores/shop' },
+      ]) },
+      { provide: CouponleoNewsletterService, useValue: { previewSavedItems: () => of({ data: {
+        generatedAt: '2026-09-20T00:00:00Z', deliveryMode: 'preview_only',
+        audience: { country: 'all', locale: 'en-US', wishlistCount: 1 }, summary: 'One current match',
+        items: [{ title: 'Save 10% today', storeName: 'Shop', discountText: '10%', location: 'Global',
+          language: 'en', route: '/stores/shop', ctaUrl: '', reasons: ['Matches your saved store'], score: 90 }],
+      } }) } },
     ]);
 
-    expect(fixture.nativeElement.textContent).toContain('Stay ahead of coupon drops, price moves, and expiring offers.');
-    expect((fixture.nativeElement.querySelector('.couponleo-themed-page__nav-link.is-active') as HTMLAnchorElement | null)?.textContent)
-      .toContain('Alerts');
-    expect(findAnchorByText(fixture, 'Find deals to watch')?.getAttribute('href')).toContain('/top-deals');
+    expect(fixture.nativeElement.textContent).toContain('Save 10% today');
+    expect(findAnchorByText(fixture, 'View store offers')?.getAttribute('href')).toContain('/stores/shop');
+    expect(fixture.nativeElement.textContent).toContain('Email delivery is not active.');
   }, 25_000);
 
   it('renders the footer support pages with the shared theme', async () => {

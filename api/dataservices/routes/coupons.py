@@ -3,11 +3,13 @@ from __future__ import annotations
 from flask import Blueprint, abort, jsonify, request
 
 from data.repository import repository
+from data.offer_feedback_store import OfferFeedbackStore
 from offer_quality import prepare_offers
 from offer_verification import annotate_offers
 from routes.listing_utils import list_response, parse_bool_arg, parse_limit_arg, parse_page_arg
 
 coupons_bp = Blueprint("coupons", __name__)
+feedback_store = OfferFeedbackStore()
 
 
 def _payload() -> dict:
@@ -97,6 +99,26 @@ def get_coupon_verification(identifier: str):
     prepared = prepare_offers([item])
     verified = prepared[0] if prepared else annotate_offers([item])[0]
     response = jsonify({"data": verified["verification"]})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@coupons_bp.post("/<identifier>/feedback")
+def report_coupon_feedback(identifier: str):
+    item = repository.get_coupon_live(identifier)
+    if item is None:
+        abort(404, description="Coupon not found.")
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        abort(400, description="A JSON feedback payload is required.")
+    try:
+        recorded = feedback_store.record(item, payload.get('outcome'), request.remote_addr or '')
+    except ValueError as error:
+        abort(400, description=str(error))
+    message = ("Thanks. Your report will be reviewed; it does not verify this offer."
+               if recorded else "We already received a report for this offer today.")
+    response = jsonify({"data": {"recorded": recorded, "message": message}})
+    response.status_code = 202
     response.headers["Cache-Control"] = "no-store"
     return response
 

@@ -66,6 +66,19 @@ class NewsletterSubscriptionStore:
 
         return deepcopy(record), preview
 
+    def preview_saved_items(self, payload: Dict[str, Any], repository: Any) -> Dict[str, Any]:
+        """Build an in-app alert preview without creating an email subscription."""
+        wishlist = payload.get('wishlist', [])
+        if not isinstance(wishlist, list) or len(wishlist) > 12:
+            raise ValueError('Choose up to 12 saved stores, categories, or offers.')
+        context = self._normalize_payload({
+            'email': 'preview@couponleo.invalid',
+            'locale': payload.get('locale'),
+            'country': payload.get('country'),
+            'wishlist': wishlist,
+        })
+        return self._build_curated_preview(context, repository)
+
     def list_subscriptions(self) -> List[Dict[str, Any]]:
         with self._lock:
             subscriptions = self._read_subscriptions()
@@ -250,16 +263,16 @@ class NewsletterSubscriptionStore:
         if kind == "store":
             store_slug = _slug_from_route(route, "/stores/")
             if store_slug:
-                return repository.search_coupons(store=store_slug)
+                return repository.list_coupons_live(store=store_slug, page=1, limit=12)[0]
         elif kind == "category":
             category_slug = _slug_from_route(route, "/categories/")
             if category_slug:
-                return repository.search_coupons(category=category_slug)
+                return repository.list_coupons_live(category=category_slug, page=1, limit=12)[0]
         elif kind in {"deal", "coupon"}:
             store_slug = _slug_from_route(route, "/stores/")
             if store_slug:
-                return repository.search_coupons(store=store_slug)
-            return repository.search_coupons(query=title)
+                return repository.list_coupons_live(store=store_slug, page=1, limit=12)[0]
+            return repository.list_coupons_live(query=title, page=1, limit=12)[0]
 
         return []
 

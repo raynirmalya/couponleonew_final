@@ -5,6 +5,7 @@ import { CouponleoEonIconComponent } from './couponleo-eon-icon.component';
 import { CouponleoTelemetryService } from '../services/couponleo-telemetry.service';
 import { CouponleoApiService, CouponleoOfferVerification } from '../services/couponleo-api.service';
 import { CouponleoOfferVerificationComponent } from './couponleo-offer-verification.component';
+import { firstValueFrom } from 'rxjs';
 
 import copyIconSvg from '@eonui/icons/svg/office/eon-copy.svg?raw';
 import ticketIconSvg from '@eonui/icons/svg/office/eon-ticket.svg?raw';
@@ -59,6 +60,19 @@ export interface CouponleoCouponReveal {
             <app-couponleo-offer-verification [verification]="currentReview()" [expanded]="true" />
           }
           @if (reviewError()) { <p role="status">Verification could not be refreshed. Check the offer with the merchant.</p> }
+
+          @if (item.couponId) {
+            <section class="couponleo-coupon-dialog__feedback" aria-label="Report offer outcome">
+              <strong>Did this offer work for you?</strong>
+              <p>Share your checkout result. Shopper reports are reviewed and do not verify an offer.</p>
+              <div>
+                <button type="button" [disabled]="feedbackState() === 'sending' || feedbackState() === 'done'" (click)="reportOutcome('worked')">Yes, it worked</button>
+                <button type="button" [disabled]="feedbackState() === 'sending' || feedbackState() === 'done'" (click)="reportOutcome('did_not_work')">No, it did not</button>
+              </div>
+              @if (feedbackState() === 'done') { <p role="status">{{ feedbackMessage() }}</p> }
+              @if (feedbackState() === 'error') { <p role="alert">The report could not be sent. Please try again later.</p> }
+            </section>
+          }
 
           @if (item.code) {
           <div class="couponleo-coupon-dialog__ticket">
@@ -234,6 +248,24 @@ export interface CouponleoCouponReveal {
       height: 1rem;
     }
 
+    .couponleo-coupon-dialog__feedback {
+      display: grid;
+      gap: 8px;
+      padding: 14px;
+      border: 1px solid rgba(22, 36, 74, 0.12);
+      border-radius: 16px;
+      background: #f7f9ff;
+    }
+
+    .couponleo-coupon-dialog__feedback p { margin: 0; color: var(--couponleo-muted); font-size: .88rem; }
+    .couponleo-coupon-dialog__feedback div { display: flex; flex-wrap: wrap; gap: 8px; }
+    .couponleo-coupon-dialog__feedback button {
+      min-height: 40px; padding: 8px 12px; border: 1px solid #2355f6; border-radius: 8px;
+      background: #fff; color: #183a91; font: inherit; font-weight: 700; cursor: pointer;
+    }
+    .couponleo-coupon-dialog__feedback button:disabled { opacity: .55; cursor: default; }
+    .couponleo-coupon-dialog__feedback button:focus-visible { outline: 3px solid #dc7300; outline-offset: 2px; }
+
     @media (max-width: 640px) {
       .couponleo-coupon-dialog {
         align-items: end;
@@ -269,6 +301,8 @@ export class CouponleoCouponDialogComponent {
   protected readonly currentReview = signal<CouponleoOfferVerification | undefined>(undefined);
   protected readonly reviewLoading = signal(false);
   protected readonly reviewError = signal(false);
+  protected readonly feedbackState = signal<'idle' | 'sending' | 'done' | 'error'>('idle');
+  protected readonly feedbackMessage = signal('');
 
   constructor() {
     effect((onCleanup) => {
@@ -276,6 +310,8 @@ export class CouponleoCouponDialogComponent {
       this.currentReview.set(undefined);
       this.reviewError.set(false);
       this.reviewLoading.set(false);
+      this.feedbackState.set('idle');
+      this.feedbackMessage.set('');
       if (!this.browser || !item?.couponId) return;
       this.reviewLoading.set(true);
       const subscription = this.api.getCouponVerification(item.couponId).subscribe({
@@ -290,6 +326,19 @@ export class CouponleoCouponDialogComponent {
       });
       onCleanup(() => subscription.unsubscribe());
     });
+  }
+
+  protected async reportOutcome(outcome: 'worked' | 'did_not_work'): Promise<void> {
+    const item = this.coupon();
+    if (!this.browser || !item?.couponId || ['sending', 'done'].includes(this.feedbackState())) return;
+    this.feedbackState.set('sending');
+    try {
+      const response = await firstValueFrom(this.api.reportCouponFeedback(item.couponId, outcome));
+      this.feedbackMessage.set(response.data.message);
+      this.feedbackState.set('done');
+    } catch {
+      this.feedbackState.set('error');
+    }
   }
 
   protected merchantUrl(value?: string): string | null {

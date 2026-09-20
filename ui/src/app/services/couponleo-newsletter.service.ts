@@ -75,6 +75,21 @@ export class CouponleoNewsletterService {
   private readonly telemetry = inject(CouponleoTelemetryService);
   private readonly baseUrl = inject(COUPONLEO_API_BASE_URL, { optional: true }) ?? '/couponleo/api';
 
+  previewSavedItems(items: CouponleoSavedItem[]): Observable<CouponleoDataResponse<CouponleoNewsletterPreview>> {
+    return this.http.post<CouponleoDataResponse<CouponleoNewsletterPreview>>(
+      `${this.baseUrl}/newsletter/preview`,
+      {
+        country: 'all',
+        locale: this.locale.locale(),
+        wishlist: items.slice(0, 12).map((item) => ({
+          kind: item.kind,
+          route: this.sanitizeInternalUrl(item.route),
+          title: item.title.trim(),
+        })),
+      },
+    );
+  }
+
   subscribeCurrentUser(
     options: {
       country?: string;

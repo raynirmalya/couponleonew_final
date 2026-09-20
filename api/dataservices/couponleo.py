@@ -97,8 +97,26 @@ def _auth_write_allowed(path: str) -> bool:
     return normalized_path in auth_paths
 
 
+def _shopper_interaction_allowed(path: str, method: str) -> bool:
+    if method != "POST":
+        return False
+    normalized_path = (path or "").rstrip("/")
+    if normalized_path == f"{Config.API_PREFIX}/newsletter/preview":
+        return True
+    coupon_prefix = f"{Config.API_PREFIX}/coupons/"
+    if not normalized_path.startswith(coupon_prefix):
+        return False
+    suffix = normalized_path[len(coupon_prefix):].split("/")
+    return len(suffix) == 2 and bool(suffix[0]) and suffix[1] == "feedback"
+
+
 def _mutation_exception_allowed(path: str) -> bool:
-    return _newsletter_write_allowed(path) or _telemetry_write_allowed(path) or _auth_write_allowed(path)
+    return (
+        _newsletter_write_allowed(path)
+        or _telemetry_write_allowed(path)
+        or _auth_write_allowed(path)
+        or _shopper_interaction_allowed(path, request.method)
+    )
 
 
 def _loopback_origin_allowed(origin: str, host: str = "") -> bool:

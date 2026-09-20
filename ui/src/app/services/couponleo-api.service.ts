@@ -394,6 +394,14 @@ export class CouponleoApiService {
     ).pipe(timeout(8000));
   }
 
+  reportCouponFeedback(identifier: number | string, outcome: 'worked' | 'did_not_work'):
+    Observable<CouponleoDataResponse<{ recorded: boolean; message: string }>> {
+    return this.http.post<CouponleoDataResponse<{ recorded: boolean; message: string }>>(
+      `${this.baseUrl}/coupons/${encodeURIComponent(String(identifier))}/feedback`,
+      { outcome },
+    ).pipe(timeout(8000));
+  }
+
   listAllStores(
     params: Omit<CouponleoStoreListParams, 'page' | 'pageSize'> = {},
     pageSize = 250,

@@ -87,6 +87,20 @@ def create_newsletter_subscription():
     )
 
 
+@newsletter_bp.post('/preview')
+def preview_saved_alerts():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        abort(400, description='A JSON alert preview payload is required.')
+    try:
+        preview = newsletter_store.preview_saved_items(payload, repository)
+    except ValueError as error:
+        abort(400, description=str(error))
+    response = jsonify({'data': preview})
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
 @newsletter_bp.get("/subscriptions")
 def list_newsletter_subscriptions():
     if not _admin_authorized():
