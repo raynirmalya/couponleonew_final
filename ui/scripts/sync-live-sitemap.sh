@@ -8,11 +8,10 @@ summary_file="$data_dir/seo-groupings-summary.json"
 temp_file="$(mktemp "$data_dir/.seo-groupings-summary.XXXXXX")"
 trap 'rm -f "$temp_file"' EXIT
 
-curl --fail --silent --show-error --max-time 90 \
+if curl --fail --silent --show-error --max-time 90 \
   http://127.0.0.1:9600/couponleo/api/seo/groupings \
-  --output "$temp_file"
-
-python3 - "$temp_file" "$summary_file" <<'PY'
+  --output "$temp_file"; then
+  python3 - "$temp_file" "$summary_file" <<'PY'
 import json
 import os
 import sys
@@ -27,6 +26,13 @@ if not data["countries"]:
 os.replace(source, destination)
 print(f"SEO groups synced: {len(data['countries'])} countries, {len(data['groups'])} groups")
 PY
+else
+  if [[ ! -s "$summary_file" ]]; then
+    echo "SEO inventory unavailable and no prior sitemap summary exists" >&2
+    exit 1
+  fi
+  echo "SEO inventory refresh timed out; retaining the prior sitemap summary and refreshing the blog feed" >&2
+fi
 
 cd "$source_root/ui"
 COUPONLEO_PUBLIC_DIRECTORY="$public_dir" node scripts/generate-sitemap.mjs
