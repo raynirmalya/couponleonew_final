@@ -314,9 +314,10 @@ export class CouponleoSeoSyncService {
       return schema;
     }
 
+    const originalGuide = /^\/blog\/(why-promo-codes-do-not-work|compare-coupon-deals)$/.test(pathname);
     const pageSchema: Record<string, unknown> = {
       '@context': 'https://schema.org',
-      '@type': pathname === '/blog' ? 'Blog' : 'CollectionPage',
+      '@type': originalGuide ? 'Article' : pathname === '/blog' ? 'Blog' : 'CollectionPage',
       name: title,
       description,
       url: canonicalUrl,
@@ -333,6 +334,11 @@ export class CouponleoSeoSyncService {
         url: siteUrl,
       },
     };
+
+    if (originalGuide) {
+      pageSchema['headline'] = title.replace(/ \| CouponLeo$/, '');
+      pageSchema['mainEntityOfPage'] = { '@type': 'WebPage', '@id': canonicalUrl };
+    }
 
     if (/^\/stores\/[^/]+$/.test(pathname)) {
       pageSchema['about'] = {
@@ -412,8 +418,8 @@ export class CouponleoSeoSyncService {
       imagePath = '/assets/images/heroes/category-hero.png';
     } else if (pathname === '/stores' || /^\/stores\/[^/]+$/.test(pathname)) {
       imagePath = '/assets/images/heroes/stores-hero.png';
-    } else if (pathname === '/blog') {
-      imagePath = '/assets/images/blog/blog-hero-visual.png';
+    } else if (pathname === '/blog' || /^\/blog\/(why-promo-codes-do-not-work|compare-coupon-deals)$/.test(pathname)) {
+      imagePath = '/assets/images/blog/blog-hero-visual-1024.webp';
     }
 
     return new URL(imagePath, currentUrl).toString();
