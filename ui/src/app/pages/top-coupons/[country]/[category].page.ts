@@ -122,7 +122,8 @@ const groupingsStateKey = makeStateKey<CouponleoSeoGroupings>('couponleo-seo-gro
   `,
   styles: [`
     .couponleo-group-page { max-width: 1180px; margin: 0 auto; padding: 28px 20px 72px; color: var(--couponleo-text); }
-    .couponleo-group-page a { color: var(--couponleo-orange); text-underline-offset: 3px; }
+    .couponleo-group-page a { color: #183a91; text-underline-offset: 3px; }
+    .couponleo-group-page .couponleo-eyebrow { color: #8a3b11; }
     .couponleo-group-page a:focus-visible { outline: 3px solid var(--couponleo-orange); outline-offset: 4px; }
     .couponleo-group-page__breadcrumbs, .couponleo-group-page__links, .couponleo-group-page__meta { display: flex; flex-wrap: wrap; gap: 10px 20px; }
     .couponleo-group-page__breadcrumbs { margin-bottom: 28px; font-size: .9rem; }
